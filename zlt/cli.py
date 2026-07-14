@@ -36,11 +36,12 @@ def status(client: ZltClient) -> None:
     """Show signal/network status (full detail when logged in)."""
     authed = False
     try:
-        client.ensure_session()
-        data = client.get(*OPEN_KEYS, *FULL_EXTRA)
-        authed = True
-    except (LoginError, LockedOut):
-        data = client.get(*OPEN_KEYS)
+        try:
+            client.ensure_session()
+            data = client.get(*OPEN_KEYS, *FULL_EXTRA)
+            authed = True
+        except (LoginError, LockedOut):
+            data = client.get(*OPEN_KEYS)
     except RouterUnreachable as exc:
         raise click.ClickException(str(exc))
 
