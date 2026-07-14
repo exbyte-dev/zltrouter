@@ -62,3 +62,28 @@ def status(client: ZltClient) -> None:
         row("snr (dB)", "lte_snr")
     else:
         click.echo("  (rsrp/band/snr need login — set ZLT_PASSWORD)")
+
+
+from zlt.client import BEARER_REVERSE
+
+NET_KEYS = ["current_network_mode", "net_select_mode", "m_netselect_save"]
+
+
+@cli.group()
+def net() -> None:
+    """Network-mode (bearer preference) commands."""
+
+
+@net.command("get")
+@click.pass_obj
+def net_get(client: ZltClient) -> None:
+    """Show the configured network mode."""
+    try:
+        client.ensure_session()
+    except (LoginError, LockedOut) as exc:
+        raise click.ClickException(str(exc))
+    data = client.get(*NET_KEYS)
+    configured = data.get("net_select_mode") or data.get("m_netselect_save") or ""
+    friendly = BEARER_REVERSE.get(configured, "?")
+    click.echo(f"Configured mode : {friendly} ({configured or 'unknown'})")
+    click.echo(f"Current network : {data.get('current_network_mode', '')}")
