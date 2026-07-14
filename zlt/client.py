@@ -1,5 +1,9 @@
 import base64
 import hashlib
+import json
+import os
+import time
+from pathlib import Path
 
 import requests
 
@@ -112,12 +116,88 @@ class ZltClient:
         lock = int(lock_raw) if lock_raw not in ("", None) else DEFAULT_LOCK_TIME
         return remaining, lock
 
-    # --- session persistence (stub until Task 3b) ----------------------------
-    def _load_session(self) -> None:
-        pass
+    # --- auth / writes --------------------------------------------------------
+    _AUTH_FAIL_MARKERS = {"no_session", "session_error", "need_login", "not_login", "-1"}
 
-    # --- temporary shim (replaced by real login in Task 3b) -------------------
-    def ensure_session(self) -> None:
+    def _post_raw(self, body: dict) -> dict:
+        headers = {"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"}
+        try:
+            resp = self.http.post(
+                f"{self.config.host}/reqproc/proc_post",
+                data=body,
+                headers=headers,
+                timeout=self.timeout,
+            )
+        except requests.RequestException as exc:
+            raise RouterUnreachable(f"cannot reach {self.config.host}: {exc}") from exc
+        return resp.json()
+
+    def login(self, force: bool = False) -> dict:
         if not self.config.password:
-            raise LoginError("ZLT_PASSWORD not set")
-        raise LoginError("login not implemented yet")
+            raise LoginError("ZLT_PASSWORD not set — cannot log in")
+        remaining, lock = self.attempts_remaining()
+        if remaining < 2:
+            raise LockedOut(
+                f"Only {remaining} login attempt(s) remaining before a {lock}s lockout — "
+                f"refusing to try. Log in via the web UI at {self.config.host} to reset."
+            )
+        nonce = self.get("get_random_login").get("random_login", "")
+        if not nonce:
+            raise LoginError("router did not return a random_login nonce")
+        body = {
+            "isTest": "false",
+            "goformId": "LOGIN",
+            "username": encode_username(self.config.username),
+            "password": encode_password(nonce, self.config.password),
+            "CSRFToken": self.token(),
+        }
+        data = self._post_raw(body)
+        if str(data.get("result")) not in ("0", "4"):
+            raise LoginError(
+                f"login rejected (result={data.get('result')}); "
+                f"{remaining} attempt(s) were remaining"
+            )
+        self._save_session()
+        return data
+
+    def ensure_session(self) -> None:
+        if self.token():
+            return
+        self.login()
+
+    def post(self, goform_id: str, **fields: str) -> dict:
+        self.ensure_session()
+        return self._post_with_retry(goform_id, fields, retried=False)
+
+    def _post_with_retry(self, goform_id: str, fields: dict, retried: bool) -> dict:
+        body = {"isTest": "false", "goformId": goform_id, **fields}
+        body.setdefault("CSRFToken", self.token())
+        data = self._post_raw(body)
+        if not retried and str(data.get("result", "")).lower() in self._AUTH_FAIL_MARKERS:
+            self.login(force=True)
+            return self._post_with_retry(goform_id, fields, retried=True)
+        return data
+
+    # --- session persistence ---------------------------------------------------
+    def _save_session(self) -> None:
+        self.session_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "host": self.config.host,
+            "cookies": requests.utils.dict_from_cookiejar(self.http.cookies),
+            "ts": int(time.time()),
+        }
+        self.session_path.write_text(json.dumps(payload))
+        try:
+            os.chmod(self.session_path, 0o600)
+        except OSError:
+            pass
+
+    def _load_session(self) -> None:
+        try:
+            payload = json.loads(Path(self.session_path).read_text())
+        except (OSError, json.JSONDecodeError):
+            return
+        if payload.get("host") != self.config.host:
+            return
+        for name, value in payload.get("cookies", {}).items():
+            self.http.cookies.set(name, value)
