@@ -115,3 +115,9 @@ class ZltClient:
     # --- session persistence (stub until Task 3b) ----------------------------
     def _load_session(self) -> None:
         pass
+
+    # --- temporary shim (replaced by real login in Task 3b) -------------------
+    def ensure_session(self) -> None:
+        if not self.config.password:
+            raise LoginError("ZLT_PASSWORD not set")
+        raise LoginError("login not implemented yet")
