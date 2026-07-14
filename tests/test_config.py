@@ -25,6 +25,7 @@ def test_config_file_read_and_env_overrides(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("ZLT_HOST", raising=False)
     monkeypatch.delenv("ZLT_PASSWORD", raising=False)
+    monkeypatch.delenv("ZLT_USERNAME", raising=False)
     c = cfg.load_config()
     assert c.host == "http://10.0.0.1"  # trailing slash stripped
     assert c.password == "secret"       # quotes stripped
