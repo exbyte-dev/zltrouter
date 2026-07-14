@@ -91,9 +91,11 @@ class ZltClient:
                 params=params,
                 timeout=self.timeout,
             )
+            return resp.json()
         except requests.RequestException as exc:
             raise RouterUnreachable(f"cannot reach {self.config.host}: {exc}") from exc
-        return resp.json()
+        except ValueError as exc:
+            raise RouterUnreachable(f"router returned a non-JSON response: {exc}") from exc
 
     def token(self) -> str:
         data = self.get("get_token")
