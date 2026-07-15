@@ -3,7 +3,7 @@ import json
 import click
 
 from zlt import __version__
-from zlt.client import LockedOut, LoginError, RouterUnreachable, ZltClient
+from zlt.client import BEARER_MAP, LockedOut, LoginError, RouterUnreachable, ZltClient
 from zlt.config import load_config
 
 OPEN_KEYS = ["network_type", "rssi", "signalbar", "lte_rsrq", "lte_pci", "ppp_status"]
@@ -87,3 +87,55 @@ def net_get(client: ZltClient) -> None:
     friendly = BEARER_REVERSE.get(configured, "?")
     click.echo(f"Configured mode : {friendly} ({configured or 'unknown'})")
     click.echo(f"Current network : {data.get('current_network_mode', '')}")
+
+
+@net.command("set")
+@click.argument("mode", type=click.Choice(sorted(BEARER_MAP.keys())))
+@click.pass_obj
+def net_set(client: ZltClient, mode: str) -> None:
+    """Set network mode: auto|lte|4g|4g3g|wcdma|3g|gsm|2g."""
+    value = BEARER_MAP[mode]
+    try:
+        client.ensure_session()
+        data = client.post("SET_BEARER_PREFERENCE", BearerPreference=value)
+    except (LoginError, LockedOut, RouterUnreachable) as exc:
+        raise click.ClickException(str(exc))
+    if str(data.get("result")) != "success":
+        raise click.ClickException(f"router rejected mode change: result={data.get('result')}")
+    try:
+        confirm = client.get(*NET_KEYS)
+    except RouterUnreachable as exc:
+        raise click.ClickException(str(exc))
+    now = confirm.get("net_select") or confirm.get("net_select_mode") or confirm.get("m_netselect_save") or ""
+    click.echo(f"OK — set to {mode} ({value}); router now reports {now or 'unknown'}")
+
+
+@cli.command()
+@click.argument("goform_id")
+@click.argument("pairs", nargs=-1)
+@click.pass_obj
+def post(client: ZltClient, goform_id: str, pairs: tuple[str, ...]) -> None:
+    """Raw proc_post passthrough: zlt post GOFORMID key=val ..."""
+    fields = {}
+    for pair in pairs:
+        if "=" not in pair:
+            raise click.ClickException(f"bad field '{pair}', expected key=value")
+        key, val = pair.split("=", 1)
+        fields[key] = val
+    try:
+        click.echo(json.dumps(client.post(goform_id, **fields), indent=2))
+    except (LoginError, LockedOut, RouterUnreachable) as exc:
+        raise click.ClickException(str(exc))
+
+
+@cli.command()
+@click.pass_obj
+def login(client: ZltClient) -> None:
+    """Log in and cache the session."""
+    try:
+        remaining, lock = client.attempts_remaining()
+        click.echo(f"Attempts remaining before {lock}s lockout: {remaining}")
+        client.login(force=True)
+    except (LoginError, LockedOut, RouterUnreachable) as exc:
+        raise click.ClickException(str(exc))
+    click.echo("Logged in; session cached.")
