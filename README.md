@@ -16,6 +16,36 @@ Verified live against firmware `CPE_NV8645_230A_E_QX_CAN-P42U17-20250703`.
 - Config and session cache live under your home directory (XDG paths), so the command
   works from any directory once installed.
 
+## Compatibility with other ZLT/ZTE devices
+
+Built and live-verified against one device: the **MTN ZLT T10D MAX**, a ZTE NV8645 CPE
+(`cr_version: CPE_NV8645_230A_E_QX_CAN-P42U17-20250703`, `DEVICE: "ufi"` in its own
+`config.js`). The underlying `reqproc/proc_get` + `reqproc/proc_post` API, the
+`goformId=LOGIN` nonce-salted SHA-256 password scheme, and the `CSRFToken`/`get_token`
+mechanism are shared across a wider family of ZTE "reqproc" firmware used in many
+rebranded 4G/LTE CPE and MiFi routers (other ZLT-branded units, other carriers' rebrands
+of the same ZTE hardware) — so `zlt` will likely connect, log in, and read status on
+similar devices with little or no change.
+
+That said, don't assume the field-level details carry over unmodified:
+
+- The exact `proc_get` key that holds the configured network mode is **not** consistent
+  even within this device family — see "Reading back the configured mode" below, where
+  this device needed a different key (`net_select`) than the one the reference
+  implementation's own JS suggested.
+- Session handling can differ by firmware build: this device authenticates via a
+  `random` cookie; other ZTE variants (e.g. some Safaricom-branded ZTE M30S Pro units,
+  per community documentation used as a reference during development) instead bind the
+  session to the client's IP with no cookie at all. If porting to another device, verify
+  which model applies before assuming `zlt`'s cookie-based session logic works as-is.
+- `BearerPreference` values, status key names, and lockout thresholds
+  (`MAX_LOGIN_COUNT`/`login_lock_time`) may vary by firmware version even on nominally
+  the same hardware.
+
+If you're trying this against a different ZLT/ZTE router, start with the read-only
+commands (`zlt status`, `zlt get <cmd>`) before `zlt login` — they require no
+authentication and will quickly show whether the API shape matches.
+
 ## Install
 
 ```bash
