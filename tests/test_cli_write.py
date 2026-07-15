@@ -57,3 +57,24 @@ def test_post_passthrough(tmp_path):
     )
     assert result.exit_code == 0
     assert "success" in result.output
+
+
+@responses.activate
+def test_login_command_shows_attempts_then_logs_in(tmp_path):
+    install_get({
+        "psw_fail_num_str": "5", "login_lock_time": "300",
+        "random_login": "12345678", "get_token": "",
+    })
+    install_post(result="0")
+    result = CliRunner().invoke(cli, ["login"], obj=_obj(tmp_path))
+    assert result.exit_code == 0
+    assert "Attempts remaining before 300s lockout: 5" in result.output
+    assert "Logged in; session cached." in result.output
+
+
+@responses.activate
+def test_login_command_reports_lockout_cleanly(tmp_path):
+    install_get({"psw_fail_num_str": "1", "login_lock_time": "300"})
+    result = CliRunner().invoke(cli, ["login"], obj=_obj(tmp_path))
+    assert result.exit_code != 0
+    assert "Attempts remaining before 300s lockout: 1" in result.output
