@@ -66,7 +66,7 @@ def status(client: ZltClient) -> None:
 
 from zlt.client import BEARER_REVERSE
 
-NET_KEYS = ["current_network_mode", "net_select_mode", "m_netselect_save"]
+NET_KEYS = ["current_network_mode", "net_select_mode", "m_netselect_save", "net_select"]
 
 
 @cli.group()
@@ -83,7 +83,7 @@ def net_get(client: ZltClient) -> None:
     except (LoginError, LockedOut) as exc:
         raise click.ClickException(str(exc))
     data = client.get(*NET_KEYS)
-    configured = data.get("net_select_mode") or data.get("m_netselect_save") or ""
+    configured = data.get("net_select") or data.get("net_select_mode") or data.get("m_netselect_save") or ""
     friendly = BEARER_REVERSE.get(configured, "?")
     click.echo(f"Configured mode : {friendly} ({configured or 'unknown'})")
     click.echo(f"Current network : {data.get('current_network_mode', '')}")

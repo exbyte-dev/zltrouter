@@ -21,6 +21,7 @@ def test_net_get_maps_value_to_friendly(tmp_path):
         "current_network_mode": "LTE",
         "net_select_mode": "Only_LTE",
         "m_netselect_save": "Only_LTE",
+        "net_select": "Only_LTE",
     })
     result = CliRunner().invoke(cli, ["net", "get"], obj=_obj(tmp_path))
     assert result.exit_code == 0
