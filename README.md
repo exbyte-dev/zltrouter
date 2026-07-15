@@ -6,6 +6,14 @@ have to open the slow web UI. Talks directly to the device's own JSON API
 
 Verified live against firmware `CPE_NV8645_230A_E_QX_CAN-P42U17-20250703`.
 
+> **Disclaimer:** This is an independent, reverse-engineered client built by reading the
+> router's own served JavaScript and observing its behavior. It is **not affiliated with,
+> endorsed by, or supported by ZTE, MTN, or any carrier**. The API it talks to is
+> undocumented and unofficial — it can change or break on a firmware update with no
+> notice. Use at your own risk, especially the write commands (`net set`, `post`,
+> `login`); see [Safety notes](#safety-notes) before pointing this at a device you can't
+> physically reset.
+
 ## Overview
 
 - Read signal/network status without logging in (`zlt status`, `zlt get ...`).
