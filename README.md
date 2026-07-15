@@ -128,6 +128,8 @@ zlt serve --host 0.0.0.0       # reachable from other LAN devices (see note)
   PCI, bars, PPP state, polled every 1/3/10s with pause.
 - **Network mode switching:** the same `SET_BEARER_PREFERENCE` write as
   `zlt net set`, verified and re-read after each change.
+- **Light / dark:** follows your system theme by default; the toggle in the header
+  overrides it and the choice sticks.
 - Single self-contained HTML page, zero CDN dependencies: it works when the
   router LAN is your only network.
 - All auth (nonce login, CSRF, lockout guard, session cache) is delegated to
