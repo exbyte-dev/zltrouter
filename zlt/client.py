@@ -111,9 +111,15 @@ class ZltClient:
     def attempts_remaining(self) -> tuple[int, int]:
         data = self.get("psw_fail_num_str", "login_lock_time")
         raw = data.get("psw_fail_num_str", "")
-        remaining = int(raw) if raw not in ("", None) else MAX_LOGIN_COUNT
+        try:
+            remaining = int(raw) if raw not in ("", None) else MAX_LOGIN_COUNT
+        except ValueError:
+            remaining = 0
         lock_raw = data.get("login_lock_time", "")
-        lock = int(lock_raw) if lock_raw not in ("", None) else DEFAULT_LOCK_TIME
+        try:
+            lock = int(lock_raw) if lock_raw not in ("", None) else DEFAULT_LOCK_TIME
+        except ValueError:
+            lock = DEFAULT_LOCK_TIME
         return remaining, lock
 
     # --- auth / writes --------------------------------------------------------
@@ -128,11 +134,13 @@ class ZltClient:
                 headers=headers,
                 timeout=self.timeout,
             )
+            return resp.json()
         except requests.RequestException as exc:
             raise RouterUnreachable(f"cannot reach {self.config.host}: {exc}") from exc
-        return resp.json()
+        except ValueError as exc:
+            raise RouterUnreachable(f"router returned a non-JSON response: {exc}") from exc
 
-    def login(self, force: bool = False) -> dict:
+    def login(self) -> dict:
         if not self.config.password:
             raise LoginError("ZLT_PASSWORD not set — cannot log in")
         remaining, lock = self.attempts_remaining()
@@ -174,7 +182,7 @@ class ZltClient:
         body.setdefault("CSRFToken", self.token())
         data = self._post_raw(body)
         if not retried and str(data.get("result", "")).lower() in self._AUTH_FAIL_MARKERS:
-            self.login(force=True)
+            self.login()
             return self._post_with_retry(goform_id, fields, retried=True)
         return data
 

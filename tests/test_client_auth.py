@@ -3,7 +3,7 @@ import json
 import responses
 
 from tests.router_mock import PROC_POST, install_get, install_post
-from zlt.client import LockedOut, LoginError, ZltClient
+from zlt.client import LockedOut, LoginError, RouterUnreachable, ZltClient
 from zlt.config import Config
 
 
@@ -105,6 +105,18 @@ def test_post_reauth_retry_on_auth_failure(tmp_path):
     data = client.post("SET_BEARER_PREFERENCE", BearerPreference="Only_LTE")
     assert data["result"] == "success"
     assert len(_post_bodies()) == 3
+
+
+@responses.activate
+def test_post_raises_router_unreachable_on_non_json(tmp_path):
+    install_get({"token": "1"})  # already authed, skip login
+    responses.add(responses.POST, PROC_POST, body="<html>not json</html>", status=200)
+    client = _client(tmp_path)
+    try:
+        client.post("SET_BEARER_PREFERENCE", BearerPreference="NETWORK_auto")
+        assert False, "expected RouterUnreachable"
+    except RouterUnreachable:
+        pass
 
 
 @responses.activate

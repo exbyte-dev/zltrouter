@@ -4,7 +4,7 @@ import os as _os
 import click
 
 from zlt import __version__
-from zlt.client import BEARER_MAP, LockedOut, LoginError, RouterUnreachable, ZltClient
+from zlt.client import BEARER_MAP, LockedOut, LoginError, RouterError, RouterUnreachable, ZltClient
 from zlt.config import DEFAULT_HOST, DEFAULT_USERNAME, config_path, load_config
 
 OPEN_KEYS = ["network_type", "rssi", "signalbar", "lte_rsrq", "lte_pci", "ppp_status"]
@@ -36,12 +36,14 @@ def get(client: ZltClient, cmds: tuple[str, ...]) -> None:
 def status(client: ZltClient) -> None:
     """Show signal/network status (full detail when logged in)."""
     authed = False
+    fallback_reason = None
     try:
         try:
             client.ensure_session()
             data = client.get(*OPEN_KEYS, *FULL_EXTRA)
             authed = True
-        except (LoginError, LockedOut):
+        except (LoginError, LockedOut) as exc:
+            fallback_reason = str(exc) if client.config.password else None
             data = client.get(*OPEN_KEYS)
     except RouterUnreachable as exc:
         raise click.ClickException(str(exc))
@@ -61,6 +63,8 @@ def status(client: ZltClient) -> None:
         row("rsrp (dBm)", "lte_rsrp")
         row("band", "lte_band")
         row("snr (dB)", "lte_snr")
+    elif fallback_reason:
+        click.echo(f"  (rsrp/band/snr need login — {fallback_reason})")
     else:
         click.echo("  (rsrp/band/snr need login — set ZLT_PASSWORD)")
 
@@ -99,13 +103,10 @@ def net_set(client: ZltClient, mode: str) -> None:
     try:
         client.ensure_session()
         data = client.post("SET_BEARER_PREFERENCE", BearerPreference=value)
-    except (LoginError, LockedOut, RouterUnreachable) as exc:
-        raise click.ClickException(str(exc))
-    if str(data.get("result")) != "success":
-        raise click.ClickException(f"router rejected mode change: result={data.get('result')}")
-    try:
+        if str(data.get("result")) != "success":
+            raise RouterError(f"router rejected mode change: result={data.get('result')}")
         confirm = client.get(*NET_KEYS)
-    except RouterUnreachable as exc:
+    except (LoginError, LockedOut, RouterUnreachable, RouterError) as exc:
         raise click.ClickException(str(exc))
     now = confirm.get("net_select") or confirm.get("net_select_mode") or confirm.get("m_netselect_save") or ""
     click.echo(f"OK — set to {mode} ({value}); router now reports {now or 'unknown'}")
@@ -136,7 +137,7 @@ def login(client: ZltClient) -> None:
     try:
         remaining, lock = client.attempts_remaining()
         click.echo(f"Attempts remaining before {lock}s lockout: {remaining}")
-        client.login(force=True)
+        client.login()
     except (LoginError, LockedOut, RouterUnreachable) as exc:
         raise click.ClickException(str(exc))
     click.echo("Logged in; session cached.")
@@ -149,9 +150,12 @@ def login(client: ZltClient) -> None:
 def init_config(host: str, username: str, password: str) -> None:
     """Write ~/.config/zlt/config (chmod 600)."""
     path = config_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    content = f"ZLT_HOST={host}\nZLT_USERNAME={username}\nZLT_PASSWORD={password}\n"
-    fd = _os.open(path, _os.O_CREAT | _os.O_WRONLY | _os.O_TRUNC, 0o600)
-    with _os.fdopen(fd, "w") as f:
-        f.write(content)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        content = f"ZLT_HOST={host}\nZLT_USERNAME={username}\nZLT_PASSWORD={password}\n"
+        fd = _os.open(path, _os.O_CREAT | _os.O_WRONLY | _os.O_TRUNC, 0o600)
+        with _os.fdopen(fd, "w") as f:
+            f.write(content)
+    except OSError as exc:
+        raise click.ClickException(f"could not write {path}: {exc}")
     click.echo(f"Wrote {path}")
