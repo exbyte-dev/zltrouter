@@ -3,184 +3,162 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
 <title>zlt · signal</title>
 <style>
   :root{
-    --bg:#14171C; --panel:#1B2027; --panel-2:#161B21; --line:#262D37;
-    --ink:#E9ECF1; --muted:#8A93A2; --accent:#FFCC00;
-    --good:#4ADE80; --fair:#FBBF24; --poor:#F87171;
-    --mono:ui-monospace,'Cascadia Mono','JetBrains Mono',Menlo,Consolas,monospace;
+    --bg:#F7F8FA; --surface:#FFFFFF; --line:#E7EAEE; --line-soft:#F0F2F4;
+    --ink:#1A1D21; --muted:#6B7280; --faint:#9CA3AF;
+    --q:#9CA3AF; /* live quality color — set by JS (green/amber/red) */
+    --good:#16A34A; --fair:#D97706; --poor:#DC2626;
+    --nums:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{
-    background:var(--bg); color:var(--ink); font-family:var(--mono);
-    min-height:100vh; padding:20px 16px 48px; max-width:880px; margin:0 auto;
-    font-size:14px; line-height:1.45;
+    background:var(--bg); color:var(--ink);
+    font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
   }
-  :focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+  main{max-width:620px; margin:0 auto; padding:28px 22px 64px}
+  :focus-visible{outline:2px solid var(--ink); outline-offset:3px; border-radius:2px}
 
-  header{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:18px}
-  .wordmark{font-weight:700; font-size:18px; letter-spacing:.04em}
-  .wordmark::after{content:"_"; color:var(--accent)}
-  .device{color:var(--muted); font-size:12px}
-  .chips{margin-left:auto; display:flex; gap:8px}
-  .chip{font-size:11px; padding:3px 9px; border:1px solid var(--line); border-radius:999px; color:var(--muted)}
-  .chip.on{border-color:var(--good); color:var(--good)}
-  .chip.off{border-color:var(--poor); color:var(--poor)}
+  header{display:flex; align-items:center; gap:10px; margin-bottom:8px}
+  .wordmark{font-weight:600; font-size:15px}
+  .host{color:var(--faint); font-size:13px}
+  .session{margin-left:auto; display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted)}
+  .dot{width:7px; height:7px; border-radius:50%; background:var(--faint)}
+  .dot.on{background:var(--good)} .dot.off{background:var(--poor)}
 
-  #banner{display:none; border:1px solid var(--poor); background:rgba(248,113,113,.08);
-    color:var(--poor); border-radius:8px; padding:10px 12px; margin-bottom:14px; font-size:12px}
+  #banner{display:none; color:var(--poor); font-size:13px; margin:10px 0}
   #banner.show{display:block}
-  #note{color:var(--muted); font-size:12px; margin-bottom:14px; display:none}
+  #note{display:none; color:var(--faint); font-size:13px; margin:6px 0}
   #note.show{display:block}
 
-  .card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px}
+  .hero{margin:52px 0 10px; text-align:center}
+  .hero .label{font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--faint)}
+  .hero .big{
+    font-size:clamp(76px,20vw,118px); font-weight:200; letter-spacing:-.03em;
+    line-height:1; margin:10px 0 4px; font-variant-numeric:tabular-nums; color:var(--ink);
+  }
+  .hero .big small{font-size:22px; font-weight:400; color:var(--faint); letter-spacing:0; margin-left:6px}
+  .hero .quality{font-size:15px; font-weight:500; color:var(--q); transition:color .5s}
 
-  .hero{display:flex; gap:20px; flex-wrap:wrap; align-items:center; justify-content:space-between}
-  .reading .label{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.12em}
-  .reading .big{font-size:56px; font-weight:700; line-height:1.05; font-variant-numeric:tabular-nums}
-  .reading .big small{font-size:20px; color:var(--muted); font-weight:400; margin-left:4px}
-  .quality{font-size:13px; margin-top:2px}
+  .bar{height:3px; background:var(--line-soft); border-radius:2px; margin:34px 0 6px; overflow:hidden}
+  .bar i{display:block; height:100%; width:0%; background:var(--q); border-radius:2px;
+    transition:width .6s ease, background-color .5s}
+  .bar-ends{display:flex; justify-content:space-between; color:var(--faint); font-size:11px;
+    font-family:var(--nums); margin-bottom:44px}
 
-  .modes{display:flex; flex-direction:column; gap:8px; min-width:260px}
-  .modes .label{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.12em}
-  .seg{display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden}
+  section h2{font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--faint);
+    font-weight:500; margin-bottom:14px}
+  .caption{float:right; letter-spacing:0; text-transform:none; font-size:12px; color:var(--faint)}
+
+  .spark-wrap{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:16px 14px 10px; margin-bottom:44px}
+  svg{display:block; width:100%; height:96px}
+
+  .readings{background:var(--surface); border:1px solid var(--line); border-radius:10px;
+    padding:4px 18px; margin-bottom:44px}
+  .row{display:flex; justify-content:space-between; align-items:baseline;
+    padding:11px 0; border-bottom:1px solid var(--line-soft)}
+  .row:last-child{border-bottom:none}
+  .row .k{color:var(--muted); font-size:14px}
+  .row .v{font-family:var(--nums); font-size:14px; color:var(--ink)}
+  .row .v:empty::after{content:"—"; color:var(--faint)}
+
+  .modes{margin-bottom:44px}
+  .seg{display:flex; gap:8px; flex-wrap:wrap}
   .seg button{
-    flex:1; background:var(--panel-2); color:var(--muted); border:none; padding:9px 0;
-    font:inherit; font-size:12px; cursor:pointer; border-right:1px solid var(--line);
+    font:inherit; font-size:14px; padding:8px 16px; cursor:pointer;
+    background:var(--surface); color:var(--muted);
+    border:1px solid var(--line); border-radius:999px;
   }
-  .seg button:last-child{border-right:none}
   .seg button:hover{color:var(--ink)}
-  .seg button.active{background:var(--accent); color:#14171C; font-weight:700}
-  .seg button:disabled{opacity:.5; cursor:wait}
-  .modehint{font-size:11px; color:var(--muted); min-height:15px}
+  .seg button.active{background:var(--ink); border-color:var(--ink); color:#fff}
+  .seg button:disabled{opacity:.45; cursor:wait}
+  .modehint{font-size:13px; color:var(--faint); margin-top:10px; min-height:18px}
 
-  .meter{margin-top:18px}
-  .meter .scale{position:relative; height:12px; border-radius:6px; overflow:hidden; display:flex}
-  .meter .zone{height:100%}
-  .meter .needle{position:absolute; top:-3px; width:2px; height:18px; background:var(--ink);
-    box-shadow:0 0 0 1px var(--bg); transition:left .6s ease}
-  @media (prefers-reduced-motion: reduce){ .meter .needle{transition:none} }
-  .meter .ticks{display:flex; justify-content:space-between; color:var(--muted); font-size:10px; margin-top:5px}
-
-  h2{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.14em; margin-bottom:10px}
-  .legend{float:right; font-size:10px; text-transform:none; letter-spacing:0}
-  .legend .rsrp{color:var(--accent)} .legend .rssi{color:var(--muted)}
-  svg{display:block; width:100%; height:120px}
-
-  .tiles{display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px}
-  .tile{background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 12px}
-  .tile .k{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.1em}
-  .tile .v{font-size:17px; margin-top:3px; font-variant-numeric:tabular-nums; word-break:break-all}
-
-  footer{display:flex; gap:14px; align-items:center; color:var(--muted); font-size:12px; flex-wrap:wrap}
+  footer{display:flex; align-items:center; gap:18px; color:var(--faint); font-size:13px}
   footer button, footer select{
-    background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px;
-    font:inherit; font-size:12px; padding:5px 12px; cursor:pointer;
+    font:inherit; font-size:13px; background:none; border:none; color:var(--muted);
+    cursor:pointer; padding:2px 0; text-decoration:underline; text-underline-offset:3px;
   }
+  footer select{text-decoration:none; border-bottom:1px solid var(--line)}
+  @media (prefers-reduced-motion: reduce){ .bar i, .hero .quality{transition:none} }
 </style>
 </head>
 <body>
-<header>
-  <span class="wordmark">zlt</span>
-  <span class="device">ZLT T10D MAX · <span id="host">…</span></span>
-  <span class="chips">
-    <span class="chip" id="session">connecting</span>
-  </span>
-</header>
+<main>
+  <header>
+    <span class="wordmark">zlt</span>
+    <span class="host" id="host"></span>
+    <span class="session"><span class="dot" id="dot"></span><span id="sessionWord">connecting</span></span>
+  </header>
+  <div id="banner" role="alert"></div>
+  <div id="note"></div>
 
-<div id="banner" role="alert"></div>
-<div id="note"></div>
-
-<div class="card hero">
-  <div class="reading">
+  <div class="hero">
     <div class="label" id="bigLabel">RSRP</div>
     <div class="big"><span id="bigVal">—</span><small>dBm</small></div>
     <div class="quality" id="qualityWord">&nbsp;</div>
   </div>
-  <div class="modes">
-    <div class="label">Network mode</div>
+
+  <div class="bar" aria-hidden="true"><i id="fill"></i></div>
+  <div class="bar-ends"><span id="barMin"></span><span id="barMax"></span></div>
+
+  <section>
+    <h2>Walk test <span class="caption" id="sparkCaption">last 15 min</span></h2>
+    <div class="spark-wrap">
+      <svg id="spark" viewBox="0 0 800 96" preserveAspectRatio="none" aria-label="Signal history"></svg>
+    </div>
+  </section>
+
+  <section>
+    <h2>Readings</h2>
+    <div class="readings" id="readings"></div>
+  </section>
+
+  <section class="modes">
+    <h2>Network mode</h2>
     <div class="seg" id="seg" role="group" aria-label="Network mode">
-      <button data-mode="auto">auto</button>
+      <button data-mode="auto">Auto</button>
       <button data-mode="lte">4G</button>
       <button data-mode="4g3g">4G/3G</button>
       <button data-mode="wcdma">3G</button>
       <button data-mode="gsm">2G</button>
     </div>
     <div class="modehint" id="modehint"></div>
-  </div>
-  <div class="meter" style="flex-basis:100%">
-    <div class="scale" id="scale">
-      <div class="needle" id="needle" style="left:0%"></div>
-    </div>
-    <div class="ticks" id="ticks"></div>
-  </div>
-</div>
+  </section>
 
-<div class="card">
-  <h2>Walk test <span class="legend"><span class="rsrp">— rsrp</span> · <span class="rssi">— rssi</span></span></h2>
-  <svg id="spark" viewBox="0 0 800 120" preserveAspectRatio="none" aria-label="Signal history"></svg>
-</div>
-
-<div class="card">
-  <h2>Readings</h2>
-  <div class="tiles" id="tiles"></div>
-</div>
-
-<footer>
-  <button id="pause">Pause</button>
-  <label>every
-    <select id="interval">
-      <option value="1000">1s</option>
-      <option value="3000" selected>3s</option>
-      <option value="10000">10s</option>
-    </select>
-  </label>
-  <span id="stamp"></span>
-</footer>
+  <footer>
+    <button id="pause">Pause</button>
+    <label>every
+      <select id="interval">
+        <option value="1000">1s</option>
+        <option value="3000" selected>3s</option>
+        <option value="10000">10s</option>
+      </select>
+    </label>
+    <span id="stamp"></span>
+  </footer>
+</main>
 
 <script>
 "use strict";
 const $ = id => document.getElementById(id);
 
-/* RSRP is the primary metric when authed; RSSI is the open fallback. */
 const METRIC = {
-  rsrp: { min:-125, max:-70, zones:[[-100,'poor'],[-90,'fair'],[-70,'good']] },
-  rssi: { min:-100, max:-45, zones:[[-75,'poor'],[-65,'fair'],[-45,'good']] },
+  rsrp: { min:-125, max:-70, fair:-100, good:-90, excellent:-80 },
+  rssi: { min:-100, max:-45, fair:-75,  good:-65, excellent:-55 },
 };
 function quality(kind, v){
-  const q = METRIC[kind].zones;
-  if (v >= q[2][0] - (q[2][0]-q[1][0])) {} /* no-op, kept simple below */
-  if (v >= q[1][0]) return v >= (kind==='rsrp' ? -80 : -55) ? ['excellent','var(--good)'] : ['good','var(--good)'];
-  if (v >= q[0][0]) return ['fair','var(--fair)'];
-  return ['poor','var(--poor)'];
+  const m = METRIC[kind];
+  if (v >= m.excellent) return ['excellent', 'var(--good)'];
+  if (v >= m.good)      return ['good',      'var(--good)'];
+  if (v >= m.fair)      return ['fair',      'var(--fair)'];
+  return ['poor', 'var(--poor)'];
 }
 
-/* Build meter zones + ticks for a metric */
-let meterKind = null;
-function buildMeter(kind){
-  if (meterKind === kind) return;
-  meterKind = kind;
-  const m = METRIC[kind], span = m.max - m.min;
-  const stops = [[m.min, m.zones[0][0], 'var(--poor)'],
-                 [m.zones[0][0], m.zones[1][0], 'var(--fair)'],
-                 [m.zones[1][0], m.max, 'var(--good)']];
-  const scale = $('scale');
-  scale.querySelectorAll('.zone').forEach(z => z.remove());
-  for (const [a,b,c] of stops){
-    const d = document.createElement('div');
-    d.className = 'zone';
-    d.style.width = ((b-a)/span*100) + '%';
-    d.style.background = c; d.style.opacity = .35;
-    scale.insertBefore(d, $('needle'));
-  }
-  $('ticks').innerHTML = '';
-  for (let t = m.min; t <= m.max; t += 10){
-    const s = document.createElement('span'); s.textContent = t; $('ticks').appendChild(s);
-  }
-}
-
-/* Rolling history for the walk-test strip (15 min at any interval) */
+/* Rolling history for the walk-test strip */
 const HIST_MS = 15*60*1000;
 const hist = [];
 function pushHist(rsrp, rssi){
@@ -191,32 +169,29 @@ function pushHist(rsrp, rssi){
 function drawSpark(){
   const svg = $('spark');
   if (hist.length < 2){ svg.innerHTML = ''; return; }
-  const t0 = hist[0].t, t1 = hist[hist.length-1].t, span = Math.max(t1 - t0, 1);
-  const y = v => { // shared vertical scale across both series
-    const lo = -120, hi = -45;
-    return 115 - (Math.min(Math.max(v, lo), hi) - lo) / (hi - lo) * 110;
-  };
-  const line = (key, color, w) => {
+  const t0 = hist[0].t, span = Math.max(hist[hist.length-1].t - t0, 1);
+  const y = v => 92 - (Math.min(Math.max(v,-120),-45) + 120) / 75 * 88;
+  const line = (key, stroke, w) => {
     const pts = hist.filter(h => h[key] != null)
-      .map(h => `${((h.t - t0)/span*800).toFixed(1)},${y(h[key]).toFixed(1)}`);
+      .map(h => `${((h.t-t0)/span*800).toFixed(1)},${y(h[key]).toFixed(1)}`);
     return pts.length > 1
-      ? `<polyline points="${pts.join(' ')}" fill="none" stroke="${color}" stroke-width="${w}" vector-effect="non-scaling-stroke"/>`
-      : '';
+      ? `<polyline points="${pts.join(' ')}" fill="none" stroke="${stroke}" stroke-width="${w}"
+          stroke-linejoin="round" vector-effect="non-scaling-stroke"/>` : '';
   };
-  svg.innerHTML =
-    `<line x1="0" y1="${y(-90)}" x2="800" y2="${y(-90)}" stroke="var(--line)" stroke-dasharray="4 4"/>` +
-    line('rssi','var(--muted)',1) + line('rsrp','var(--accent)',1.6);
+  svg.innerHTML = line('rssi','var(--line)',1.2) + line('rsrp','var(--q)',1.8);
+  const hasRsrp = hist.some(h => h.rsrp != null);
+  $('sparkCaption').textContent = hasRsrp ? 'rsrp · rssi in grey · last 15 min' : 'rssi · last 15 min';
 }
 
-/* Tiles */
-const TILE_DEFS = [
-  ['network_type','type'], ['lte_band','band'], ['signalbar','bars /5'],
-  ['lte_snr','snr dB'], ['lte_rsrq','rsrq dB'], ['rssi','rssi dBm'],
-  ['lte_pci','pci'], ['ppp_status','ppp'],
+/* Readings list */
+const ROWS = [
+  ['network_type','Network'], ['lte_band','Band'], ['signalbar','Bars (of 5)'],
+  ['lte_snr','SNR (dB)'], ['lte_rsrq','RSRQ (dB)'], ['rssi','RSSI (dBm)'],
+  ['lte_pci','Cell PCI'], ['ppp_status','Connection'],
 ];
-function drawTiles(d){
-  $('tiles').innerHTML = TILE_DEFS.map(([k,label]) =>
-    `<div class="tile"><div class="k">${label}</div><div class="v">${d[k] || '—'}</div></div>`
+function drawReadings(d){
+  $('readings').innerHTML = ROWS.map(([k,label]) =>
+    `<div class="row"><span class="k">${label}</span><span class="v">${d[k] ?? ''}</span></div>`
   ).join('');
 }
 
@@ -229,34 +204,35 @@ async function poll(){
     const s = await r.json();
     $('banner').classList.remove('show');
     $('host').textContent = s.host.replace(/^https?:\/\//,'');
-    const chip = $('session');
-    chip.textContent = s.authed ? 'session ok' : 'open data only';
-    chip.className = 'chip ' + (s.authed ? 'on' : 'off');
+    $('dot').className = 'dot ' + (s.authed ? 'on' : 'off');
+    $('sessionWord').textContent = s.authed ? 'logged in' : 'open data';
     if (s.note){ $('note').textContent = s.note; $('note').classList.add('show'); }
     else $('note').classList.remove('show');
 
     const d = s.data;
-    const rsrp = d.lte_rsrp !== '' && d.lte_rsrp != null ? Number(d.lte_rsrp) : null;
-    const rssi = d.rssi !== '' && d.rssi != null ? Number(d.rssi) : null;
+    const num = x => (x !== '' && x != null && !isNaN(Number(x))) ? Number(x) : null;
+    const rsrp = num(d.lte_rsrp), rssi = num(d.rssi);
     const kind = rsrp != null ? 'rsrp' : 'rssi';
     const val  = rsrp != null ? rsrp : rssi;
+    const m = METRIC[kind];
     $('bigLabel').textContent = kind.toUpperCase();
-    $('bigVal').textContent = val != null ? val : '—';
-    buildMeter(kind);
+    $('barMin').textContent = m.min; $('barMax').textContent = m.max;
     if (val != null){
-      const m = METRIC[kind];
-      const pct = (Math.min(Math.max(val, m.min), m.max) - m.min) / (m.max - m.min) * 100;
-      $('needle').style.left = pct + '%';
       const [word, color] = quality(kind, val);
+      document.documentElement.style.setProperty('--q', color);
+      $('bigVal').textContent = val;
       $('qualityWord').textContent = word;
-      $('qualityWord').style.color = color;
+      $('fill').style.width =
+        ((Math.min(Math.max(val,m.min),m.max) - m.min) / (m.max - m.min) * 100) + '%';
     } else {
+      document.documentElement.style.setProperty('--q', 'var(--faint)');
+      $('bigVal').textContent = '—';
       $('qualityWord').textContent = 'no reading';
-      $('qualityWord').style.color = 'var(--muted)';
+      $('fill').style.width = '0%';
     }
     pushHist(rsrp, rssi);
     drawSpark();
-    drawTiles(d);
+    drawReadings(d);
     $('stamp').textContent = 'updated ' + new Date().toLocaleTimeString();
   } catch (e) {
     $('banner').textContent = 'status: ' + e.message;
@@ -297,7 +273,7 @@ document.querySelectorAll('#seg button').forEach(btn => {
     if (modeBusy) return;
     modeBusy = true;
     document.querySelectorAll('#seg button').forEach(b => b.disabled = true);
-    $('modehint').textContent = 'setting ' + btn.dataset.mode + '…';
+    $('modehint').textContent = 'setting ' + btn.textContent + '…';
     try {
       const r = await fetch('/api/net', {
         method:'POST', headers:{'Content-Type':'application/json'},
