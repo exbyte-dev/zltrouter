@@ -8,3 +8,8 @@ dist/
 .pytest_cache/
 TODO.md
 0001-*.patch
+
+# Local Claude Code / superpowers scaffolding — not part of the project
+.claude/
+.superpowers/
+docs/superpowers/
