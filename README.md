@@ -9,7 +9,7 @@ Verified live against firmware `CPE_NV8645_230A_E_QX_CAN-P42U17-20250703`.
 > **Disclaimer:** This is an independent, reverse-engineered client built by reading the
 > router's own served JavaScript and observing its behavior. It is **not affiliated with,
 > endorsed by, or supported by ZTE, MTN, or any carrier**. The API it talks to is
-> undocumented and unofficial — it can change or break on a firmware update with no
+> undocumented and unofficial. It can change or break on a firmware update with no
 > notice. Use at your own risk, especially the write commands (`net set`, `post`,
 > `login`); see [Safety notes](#safety-notes) before pointing this at a device you can't
 > physically reset.
@@ -32,13 +32,13 @@ Built and live-verified against one device: the **MTN ZLT T10D MAX**, a ZTE NV86
 `goformId=LOGIN` nonce-salted SHA-256 password scheme, and the `CSRFToken`/`get_token`
 mechanism are shared across a wider family of ZTE "reqproc" firmware used in many
 rebranded 4G/LTE CPE and MiFi routers (other ZLT-branded units, other carriers' rebrands
-of the same ZTE hardware) — so `zlt` will likely connect, log in, and read status on
+of the same ZTE hardware), so `zlt` will likely connect, log in, and read status on
 similar devices with little or no change.
 
 That said, don't assume the field-level details carry over unmodified:
 
 - The exact `proc_get` key that holds the configured network mode is **not** consistent
-  even within this device family — see "Reading back the configured mode" below, where
+  even within this device family: see "Reading back the configured mode" below, where
   this device needed a different key (`net_select`) than the one the reference
   implementation's own JS suggested.
 - Session handling can differ by firmware build: this device authenticates via a
@@ -51,7 +51,7 @@ That said, don't assume the field-level details carry over unmodified:
   the same hardware.
 
 If you're trying this against a different ZLT/ZTE router, start with the read-only
-commands (`zlt status`, `zlt get <cmd>`) before `zlt login` — they require no
+commands (`zlt status`, `zlt get <cmd>`) before `zlt login`. They require no
 authentication and will quickly show whether the API shape matches.
 
 ## Install
@@ -79,7 +79,7 @@ zlt init-config --host http://192.168.8.1 --username admin
 ```
 
 See `.env.example` for the file format if you'd rather write it by hand (or use a
-project-local `.env` during development — never commit real secrets).
+project-local `.env` during development; never commit real secrets).
 
 ### Config resolution order
 
@@ -100,8 +100,8 @@ Session cache (the authenticated cookie): `$XDG_STATE_HOME/zlt/session.json`
 | `zlt status` | best-effort | Shows signal/network status. Tries to log in for full detail (adds RSRP, band, SNR); falls back to the open subset if no password is configured or login fails. |
 | `zlt net get` | yes | Shows the router's configured network mode, mapped to a friendly name (`auto`, `lte`, `4g3g`, `wcdma`, `gsm`). |
 | `zlt net set <mode>` | yes | Sets the network mode. `<mode>` is one of `auto \| lte \| 4g \| 4g3g \| wcdma \| 3g \| gsm \| 2g`. Verifies the POST result, then re-reads to confirm the change took. |
-| `zlt get <cmd> [cmd ...]` | no | Raw `proc_get` passthrough — pretty-prints the JSON response for any key(s) the device supports. |
-| `zlt post <goformId> [key=val ...]` | yes | Raw `proc_post` passthrough — ensures a session, attaches a fresh CSRF token, prints the JSON response. |
+| `zlt get <cmd> [cmd ...]` | no | Raw `proc_get` passthrough: pretty-prints the JSON response for any key(s) the device supports. |
+| `zlt post <goformId> [key=val ...]` | yes | Raw `proc_post` passthrough: ensures a session, attaches a fresh CSRF token, prints the JSON response. |
 | `zlt login` | yes | Forces a fresh login, prints attempts remaining before the lockout, caches the session cookie. |
 | `zlt init-config` | no | Interactively writes `~/.config/zlt/config` (`chmod 600`). Flags: `--host`, `--username`; password is prompted (hidden input). |
 | `zlt --version` | no | Prints the installed version. |
@@ -126,7 +126,7 @@ Derived from the device's own served JavaScript (`/js/service.js`,
 - **Headers replicated from the web UI:** `Referer: <host>/index.html`,
   `X-Requested-With: XMLHttpRequest`.
 - **Session:** carried by a cookie named `random`, set by a successful `LOGIN` POST.
-  Stored server-side per-cookie, not IP-bound — an unauthenticated request from the same
+  Stored server-side per-cookie, not IP-bound: an unauthenticated request from the same
   machine gets empty/unauthenticated results even while the web UI is independently
   logged in; only presenting the actual session cookie authenticates.
 
@@ -157,7 +157,7 @@ Derived from the device's own served JavaScript (`/js/service.js`,
 GET proc_get?isTest=false&cmd=get_token  ->  {"token": "<value>"}   (or {"get_token": "<value>"})
 ```
 
-- Used **raw** as the `CSRFToken` field on every POST — no hashing.
+- Used **raw** as the `CSRFToken` field on every POST (no hashing).
 - Empty (`""`) before login is valid and accepted for the `LOGIN` POST itself; a non-empty
   value appears once a session cookie is presented, and is fetched fresh before every
   subsequent write.
@@ -178,12 +178,12 @@ Write: `POST goformId=SET_BEARER_PREFERENCE&BearerPreference=<value>`, success i
 All five values are live-verified against the real device (not just read from config JS).
 Note `wcdma`/`3g` maps to `TD_W`, **not** `Only_WCDMA`.
 
-#### Reading back the configured mode — important, corrected finding
+#### Reading back the configured mode: important, corrected finding
 
 The web UI's own JS reads a batch of keys to display the configured mode:
 `current_network_mode, net_select_mode, m_netselect_save, m_netselect_contents,
 net_select, ppp_status, modem_main_state`. On this device/firmware, most of those come
-back **empty even when authenticated** — `net_select_mode` and `m_netselect_save` are
+back **empty even when authenticated**. `net_select_mode` and `m_netselect_save` are
 *not* reliable. The key that actually holds the configured preference on this hardware
 is **`net_select`** (e.g. `net_select: "NETWORK_auto"`).
 
@@ -200,18 +200,18 @@ of these keys is actually populated on your device before trusting the fallback 
   `signalbar` (0-5), `lte_rsrq` (dB), `lte_pci`, `ppp_status`.
 - **Auth-only (empty until logged in):** `lte_rsrp` (dBm), `lte_band`, `lte_snr` (dB).
 - `zlt status` requests the open set unconditionally, and additionally requests the
-  auth-only set (attempting a login first) — falling back to the open-only view with a
+  auth-only set (attempting a login first), falling back to the open-only view with a
   note if there's no password configured or login fails.
 
 ### Safety / lockout keys
 
-- `psw_fail_num_str` — **attempts remaining** before lockout (not a failure counter).
+- `psw_fail_num_str`: **attempts remaining** before lockout (not a failure counter).
   Empty response defaults to `5` (`MAX_LOGIN_COUNT`).
-- `login_lock_time` — lockout duration in seconds once attempts are exhausted. Empty
+- `login_lock_time`: lockout duration in seconds once attempts are exhausted. Empty
   response defaults to `300`.
 - **Guard:** before any login attempt, `zlt` reads both keys and refuses to proceed
   (`LockedOut`) if attempts remaining `< 2`, printing the state and pointing at the web
-  UI to reset. No password is ever guessed or retried blindly — the encoding is exact,
+  UI to reset. No password is ever guessed or retried blindly: the encoding is exact,
   so a correct login succeeds on the first try.
 
 ### Auth-failure retry (writes)
@@ -220,7 +220,7 @@ of these keys is actually populated on your device before trusting the fallback 
 current `get_token` comes back empty). If a subsequent write's `result` matches a
 best-effort marker set (`no_session`, `session_error`, `need_login`, `not_login`, `-1`),
 the client re-logs in once and retries the write; a second failure raises. These markers
-are a backstop only — the primary "am I authenticated" check is always
+are a backstop only. The primary "am I authenticated" check is always
 `token() != ""`.
 
 ## Safety notes
@@ -239,10 +239,10 @@ are a backstop only — the primary "am I authenticated" check is always
 Run these by hand against the real router on the LAN (not part of the automated test
 suite, which mocks all HTTP):
 
-1. `zlt status` — confirm the reported network type / signal bars / RSSI match what the
+1. `zlt status`: confirm the reported network type / signal bars / RSSI match what the
    router's web UI shows.
-2. `zlt net get` — confirm it reports the mode currently configured in the web UI.
-3. `zlt net set lte` then `zlt net get` — confirm the mode round-trips to `lte` /
+2. `zlt net get`: confirm it reports the mode currently configured in the web UI.
+3. `zlt net set lte` then `zlt net get`: confirm the mode round-trips to `lte` /
    `Only_LTE`, then `zlt net set auto` to restore the default (`NETWORK_auto`).
 
 ## Development
