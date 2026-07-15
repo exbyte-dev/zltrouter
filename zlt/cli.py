@@ -4,12 +4,18 @@ import os as _os
 import click
 
 from zlt import __version__
-from zlt.client import BEARER_MAP, LockedOut, LoginError, RouterError, RouterUnreachable, ZltClient
+from zlt.client import (
+    BEARER_MAP,
+    FULL_EXTRA,
+    NET_KEYS,
+    OPEN_KEYS,
+    LockedOut,
+    LoginError,
+    RouterError,
+    RouterUnreachable,
+    ZltClient,
+)
 from zlt.config import DEFAULT_HOST, DEFAULT_USERNAME, config_path, load_config
-
-OPEN_KEYS = ["network_type", "rssi", "signalbar", "lte_rsrq", "lte_pci", "ppp_status"]
-FULL_EXTRA = ["lte_rsrp", "lte_band", "lte_snr"]
-
 
 @click.group()
 @click.version_option(__version__, prog_name="zlt")
@@ -70,9 +76,6 @@ def status(client: ZltClient) -> None:
 
 
 from zlt.client import BEARER_REVERSE
-
-NET_KEYS = ["current_network_mode", "net_select_mode", "m_netselect_save", "net_select"]
-
 
 @cli.group()
 def net() -> None:
@@ -159,3 +162,25 @@ def init_config(host: str, username: str, password: str) -> None:
     except OSError as exc:
         raise click.ClickException(f"could not write {path}: {exc}")
     click.echo(f"Wrote {path}")
+
+
+@cli.command()
+@click.option("--host", "bind_host", default="127.0.0.1", show_default=True,
+              help="Interface to bind. Use 0.0.0.0 to reach it from your phone on the LAN.")
+@click.option("--port", default=8464, show_default=True)
+@click.pass_obj
+def serve(client: ZltClient, bind_host: str, port: int) -> None:
+    """Serve the local web dashboard (needs: pip install 'zlt[web]')."""
+    try:
+        import uvicorn
+
+        from zlt.web import create_app
+    except ImportError:
+        raise click.ClickException(
+            "web extras not installed — run: .venv/bin/pip install -e '.[web]'"
+        )
+    click.echo(f"Dashboard on http://{bind_host}:{port} — router at {client.config.host}")
+    if bind_host != "127.0.0.1":
+        click.echo("Note: the dashboard has no auth of its own; anyone on the LAN "
+                   "who can reach this port can change router settings.")
+    uvicorn.run(create_app(client), host=bind_host, port=port, log_level="warning")

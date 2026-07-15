@@ -52,6 +52,12 @@ BEARER_REVERSE: dict[str, str] = {
 MAX_LOGIN_COUNT = 5
 DEFAULT_LOCK_TIME = 300
 
+# Status keys readable without auth, and the extras that need a session.
+OPEN_KEYS = ["network_type", "rssi", "signalbar", "lte_rsrq", "lte_pci", "ppp_status"]
+FULL_EXTRA = ["lte_rsrp", "lte_band", "lte_snr"]
+# Keys queried to resolve the configured network mode (net_select wins; see README).
+NET_KEYS = ["current_network_mode", "net_select_mode", "m_netselect_save", "net_select"]
+
 
 def encode_username(username: str) -> str:
     return base64.b64encode(username.encode("utf-8")).decode("ascii")

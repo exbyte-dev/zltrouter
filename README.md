@@ -110,6 +110,39 @@ Every authenticated command transparently logs in first if there's no valid cach
 session (`ensure_session()`), and every write retries once with a fresh login if the
 router reports an auth failure mid-request.
 
+## Web dashboard
+
+A local browser UI over the same client, for the things a one-shot CLI can't do:
+watching signal move live while you reposition the router, and flipping network
+mode with a tap from your phone.
+
+```bash
+.venv/bin/pip install -e '.[web]'
+zlt serve                      # http://127.0.0.1:8464
+zlt serve --host 0.0.0.0       # reachable from other LAN devices (see note)
+```
+
+- **Walk test strip:** rolling 15-minute RSRP/RSSI history, so you can carry the
+  router around and watch the line respond.
+- **Live meter and tiles:** RSRP (or RSSI when not logged in), band, SNR, RSRQ,
+  PCI, bars, PPP state, polled every 1/3/10s with pause.
+- **Network mode switching:** the same `SET_BEARER_PREFERENCE` write as
+  `zlt net set`, verified and re-read after each change.
+- Single self-contained HTML page, zero CDN dependencies: it works when the
+  router LAN is your only network.
+- All auth (nonce login, CSRF, lockout guard, session cache) is delegated to
+  `ZltClient`; the web layer adds no second implementation of any of it.
+
+The dashboard binds to `127.0.0.1` by default and has **no authentication of its
+own**. If you bind `0.0.0.0`, anyone on the LAN who can reach the port can read
+status and change router settings, so only do that on a network you trust.
+
+API surface (all JSON): `GET /api/status`, `GET /api/net`,
+`POST /api/net {"mode": "lte"}`. Adding future write features (USSD, SMS, etc.)
+is one endpoint here plus one panel in `zlt/static/index.html`; the raw
+`client.post()` passthrough already handles CSRF and auth-retry for any
+`goformId` you capture from the stock UI.
+
 ## Discovered API reference
 
 Derived from the device's own served JavaScript (`/js/service.js`,
