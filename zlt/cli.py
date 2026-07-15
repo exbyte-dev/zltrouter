@@ -1,10 +1,11 @@
 import json
+import os as _os
 
 import click
 
 from zlt import __version__
 from zlt.client import BEARER_MAP, LockedOut, LoginError, RouterUnreachable, ZltClient
-from zlt.config import load_config
+from zlt.config import DEFAULT_HOST, DEFAULT_USERNAME, config_path, load_config
 
 OPEN_KEYS = ["network_type", "rssi", "signalbar", "lte_rsrq", "lte_pci", "ppp_status"]
 FULL_EXTRA = ["lte_rsrp", "lte_band", "lte_snr"]
@@ -139,3 +140,18 @@ def login(client: ZltClient) -> None:
     except (LoginError, LockedOut, RouterUnreachable) as exc:
         raise click.ClickException(str(exc))
     click.echo("Logged in; session cached.")
+
+
+@cli.command("init-config")
+@click.option("--host", default=DEFAULT_HOST, show_default=True)
+@click.option("--username", default=DEFAULT_USERNAME, show_default=True)
+@click.password_option(confirmation_prompt=False, help="Router admin password")
+def init_config(host: str, username: str, password: str) -> None:
+    """Write ~/.config/zlt/config (chmod 600)."""
+    path = config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"ZLT_HOST={host}\nZLT_USERNAME={username}\nZLT_PASSWORD={password}\n"
+    )
+    _os.chmod(path, 0o600)
+    click.echo(f"Wrote {path}")
