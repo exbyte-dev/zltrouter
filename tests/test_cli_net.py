@@ -19,14 +19,15 @@ def test_net_get_maps_value_to_friendly(tmp_path):
     install_get({
         "token": "1",  # authed
         "current_network_mode": "LTE",
-        "net_select_mode": "Only_LTE",
-        "m_netselect_save": "Only_LTE",
-        "net_select": "Only_LTE",
+        "net_select_mode": "Only_GSM",     # deliberately different — must NOT win
+        "m_netselect_save": "Only_GSM",    # deliberately different — must NOT win
+        "net_select": "Only_LTE",          # this is the one the real device populates — must win
     })
     result = CliRunner().invoke(cli, ["net", "get"], obj=_obj(tmp_path))
     assert result.exit_code == 0
     assert "lte" in result.output.lower()
     assert "Only_LTE" in result.output
+    assert "Only_GSM" not in result.output
 
 
 @responses.activate

@@ -80,9 +80,9 @@ def net_get(client: ZltClient) -> None:
     """Show the configured network mode."""
     try:
         client.ensure_session()
-    except (LoginError, LockedOut) as exc:
+        data = client.get(*NET_KEYS)
+    except (LoginError, LockedOut, RouterUnreachable) as exc:
         raise click.ClickException(str(exc))
-    data = client.get(*NET_KEYS)
     configured = data.get("net_select") or data.get("net_select_mode") or data.get("m_netselect_save") or ""
     friendly = BEARER_REVERSE.get(configured, "?")
     click.echo(f"Configured mode : {friendly} ({configured or 'unknown'})")
