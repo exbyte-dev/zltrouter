@@ -58,7 +58,7 @@ and symlinks `~/.local/bin/zlt` -> `.venv/bin/zlt`.
 If `~/.local/bin` isn't already on your `PATH`, `install.sh` will tell you to add:
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"   # e.g. in ~/.zshrc
+export PATH="$HOME/.local/bin:$PATH"   # e.g. in ~/.zshrc or ~/.bashrc
 ```
 
 Then bootstrap your config (prompts for the router admin password, writes
