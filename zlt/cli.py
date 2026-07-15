@@ -150,8 +150,8 @@ def init_config(host: str, username: str, password: str) -> None:
     """Write ~/.config/zlt/config (chmod 600)."""
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        f"ZLT_HOST={host}\nZLT_USERNAME={username}\nZLT_PASSWORD={password}\n"
-    )
-    _os.chmod(path, 0o600)
+    content = f"ZLT_HOST={host}\nZLT_USERNAME={username}\nZLT_PASSWORD={password}\n"
+    fd = _os.open(path, _os.O_CREAT | _os.O_WRONLY | _os.O_TRUNC, 0o600)
+    with _os.fdopen(fd, "w") as f:
+        f.write(content)
     click.echo(f"Wrote {path}")
