@@ -156,20 +156,20 @@ runs as you and reads the same `~/.config/zlt/config`.
 ```
 
 It binds `0.0.0.0:8464` so other LAN devices (your phone) can reach it, with the
-same **no-auth, trust-your-LAN** caveat as above. `install` also enables *linger*
-so the service survives logout and starts at boot; if enabling linger needs
-privilege on your system it will tell you the one `sudo` command to run.
+same **no-auth, trust-your-LAN** caveat as above. Like any other user service, it
+starts automatically when you log in.
 
 ```bash
-./service.sh suspend      # stop it (comes back on 'resume' or next reboot)
+./service.sh suspend      # stop it (comes back on 'resume' or next login)
 ./service.sh resume       # start it again
 ./service.sh status       # is it running?
 ./service.sh logs         # follow the journal
-./service.sh uninstall    # remove it for good (stays off across reboots)
+./service.sh uninstall    # remove it for good
 ```
 
-`suspend` is temporary: because the service stays enabled, a reboot brings it back.
-To keep it off permanently, use `uninstall` (or `systemctl --user disable zlt-web`).
+`suspend` is temporary: because the service stays enabled, it starts again the next
+time you log in. To keep it off permanently, use `uninstall` (or
+`systemctl --user disable zlt-web`).
 
 ## Discovered API reference
 

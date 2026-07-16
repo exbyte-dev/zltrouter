@@ -65,16 +65,6 @@ cmd_install() {
   generate_unit > "$UNIT_PATH"
   systemctl --user daemon-reload
 
-  # Linger makes the service truly always-on (survives logout, starts at boot).
-  # Enabling it for your own user may need privilege; degrade gracefully.
-  local me
-  me="$(id -un)"
-  if ! loginctl enable-linger "$me" >/dev/null 2>&1; then
-    echo "note: could not enable linger (needs privilege)." >&2
-    echo "      service will start on login; for boot-without-login run:" >&2
-    echo "      sudo loginctl enable-linger $me" >&2
-  fi
-
   systemctl --user enable --now "$SERVICE_NAME"
 
   # Portable LAN IP for the phone-access hint. Not all systems have
@@ -88,7 +78,7 @@ cmd_install() {
   [ -n "$lan_ip" ] && echo "  LAN:    http://$lan_ip:$PORT   (phone/other devices)"
   echo
   echo "Control:"
-  echo "  ./service.sh suspend    # stop (until resume or reboot)"
+  echo "  ./service.sh suspend    # stop (until resume or next login)"
   echo "  ./service.sh resume     # start"
   echo "  ./service.sh status     # current state"
   echo "  ./service.sh logs       # follow logs"
@@ -97,8 +87,8 @@ cmd_install() {
 
 cmd_suspend() {
   systemctl --user stop "$SERVICE_NAME"
-  echo "Suspended $SERVICE_NAME (returns on 'resume' or next reboot;"
-  echo "use './service.sh uninstall' to keep it off across reboots)."
+  echo "Suspended $SERVICE_NAME (returns on 'resume' or next login;"
+  echo "use './service.sh uninstall' to keep it off for good)."
 }
 
 cmd_resume() { systemctl --user start "$SERVICE_NAME"; echo "Resumed $SERVICE_NAME."; }
@@ -111,7 +101,7 @@ cmd_uninstall() {
   systemctl --user disable --now "$SERVICE_NAME" 2>/dev/null || true
   rm -f "$UNIT_PATH"
   systemctl --user daemon-reload
-  echo "Uninstalled $SERVICE_NAME (linger left as-is)."
+  echo "Uninstalled $SERVICE_NAME."
 }
 
 usage() {
