@@ -77,8 +77,11 @@ cmd_install() {
 
   systemctl --user enable --now "$SERVICE_NAME"
 
+  # Portable LAN IP for the phone-access hint. Not all systems have
+  # `hostname -I` (e.g. GNU inetutils on Arch), and under set -o pipefail its
+  # failure would abort the script, so use iproute2 and stay non-fatal.
   local lan_ip
-  lan_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  lan_ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')" || true
   echo
   echo "Installed and started $SERVICE_NAME."
   echo "  local:  http://127.0.0.1:$PORT"
