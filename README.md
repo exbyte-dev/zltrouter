@@ -145,6 +145,32 @@ is one endpoint here plus one panel in `zlt/static/index.html`; the raw
 `client.post()` passthrough already handles CSRF and auth-retry for any
 `goformId` you capture from the stock UI.
 
+### Run it as a service
+
+To keep the dashboard always up (so you can hit it from your phone without leaving
+a terminal open), install it as a **systemd user service**. No root required: it
+runs as you and reads the same `~/.config/zlt/config`.
+
+```bash
+./service.sh install      # write the unit, enable, and start it
+```
+
+It binds `0.0.0.0:8464` so other LAN devices (your phone) can reach it, with the
+same **no-auth, trust-your-LAN** caveat as above. `install` also enables *linger*
+so the service survives logout and starts at boot; if enabling linger needs
+privilege on your system it will tell you the one `sudo` command to run.
+
+```bash
+./service.sh suspend      # stop it (comes back on 'resume' or next reboot)
+./service.sh resume       # start it again
+./service.sh status       # is it running?
+./service.sh logs         # follow the journal
+./service.sh uninstall    # remove it for good (stays off across reboots)
+```
+
+`suspend` is temporary: because the service stays enabled, a reboot brings it back.
+To keep it off permanently, use `uninstall` (or `systemctl --user disable zlt-web`).
+
 ## Discovered API reference
 
 Derived from the device's own served JavaScript (`/js/service.js`,
