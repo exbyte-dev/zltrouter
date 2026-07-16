@@ -67,10 +67,12 @@ cmd_install() {
 
   # Linger makes the service truly always-on (survives logout, starts at boot).
   # Enabling it for your own user may need privilege; degrade gracefully.
-  if ! loginctl enable-linger "$USER" >/dev/null 2>&1; then
+  local me
+  me="$(id -un)"
+  if ! loginctl enable-linger "$me" >/dev/null 2>&1; then
     echo "note: could not enable linger (needs privilege)." >&2
     echo "      service will start on login; for boot-without-login run:" >&2
-    echo "      sudo loginctl enable-linger $USER" >&2
+    echo "      sudo loginctl enable-linger $me" >&2
   fi
 
   systemctl --user enable --now "$SERVICE_NAME"
