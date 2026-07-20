@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 
 from zlt import __version__
+from zlt import service as service_mod
 from zlt.client import (
     BEARER_MAP,
     FULL_EXTRA,
@@ -200,3 +201,78 @@ def serve(client: ZltClient, bind_host: str, port: int, log_file: Path | None) -
         sys.stdout, sys.stderr = saved
         if stream is not None:
             stream.close()
+
+
+@cli.group("service")
+def service_group() -> None:
+    """Run the dashboard automatically on login."""
+
+
+def _backend(host: str = service_mod.DEFAULT_BIND, port: int = service_mod.DEFAULT_PORT):
+    try:
+        return service_mod.detect_backend(host=host, port=port)
+    except service_mod.ServiceError as exc:
+        raise click.ClickException(str(exc))
+
+
+def _do(verb: str, host: str = service_mod.DEFAULT_BIND,
+        port: int = service_mod.DEFAULT_PORT):
+    backend = _backend(host, port)
+    try:
+        getattr(backend, verb)()
+    except service_mod.ServiceError as exc:
+        raise click.ClickException(str(exc))
+    return backend
+
+
+@service_group.command("install")
+@click.option("--host", "bind_host", default=service_mod.DEFAULT_BIND, show_default=True,
+              help="Interface the dashboard binds to. 0.0.0.0 reaches your phone.")
+@click.option("--port", default=service_mod.DEFAULT_PORT, show_default=True)
+def service_install(bind_host: str, port: int) -> None:
+    """Install and start the dashboard service."""
+    backend = _do("install", bind_host, port)
+    click.echo(f"Installed {service_mod.SERVICE_NAME}, starting on login.")
+    click.echo(f"  local: http://127.0.0.1:{port}")
+    if bind_host == "0.0.0.0":
+        click.echo(f"  LAN:   http://<this machine's IP>:{port}   (phone, tablet)")
+    click.echo(f"  unit:  {backend.artifact_path()}")
+
+
+@service_group.command("uninstall")
+def service_uninstall() -> None:
+    """Stop the service and remove it for good."""
+    _do("uninstall")
+    click.echo(f"Uninstalled {service_mod.SERVICE_NAME}.")
+
+
+@service_group.command("suspend")
+def service_suspend() -> None:
+    """Stop the service without uninstalling it."""
+    backend = _do("suspend")
+    click.echo(f"Suspended {service_mod.SERVICE_NAME}: {backend.suspend_note}.")
+
+
+@service_group.command("resume")
+def service_resume() -> None:
+    """Start a suspended service."""
+    _do("resume")
+    click.echo(f"Resumed {service_mod.SERVICE_NAME}.")
+
+
+@service_group.command("status")
+def service_status() -> None:
+    """Show what the service manager reports."""
+    _do("status")
+
+
+@service_group.command("logs")
+def service_logs() -> None:
+    """Follow the dashboard's logs."""
+    _do("logs")
+
+
+@service_group.command("print-artifact")
+def service_print_artifact() -> None:
+    """Print the generated unit/plist/task XML without installing it."""
+    click.echo(_backend().render())
