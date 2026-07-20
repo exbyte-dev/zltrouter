@@ -164,6 +164,8 @@ zlt serve --host 0.0.0.0       # reachable from other LAN devices (see note)
   PCI, bars, PPP state, polled every 1/3/10s with pause.
 - **Network mode switching:** the same `SET_BEARER_PREFERENCE` write as
   `zlt net set`, verified and re-read after each change.
+- **USSD codes:** send a code and see the reply inline; interactive menus can be
+  replied to and cancelled; saved codes appear as one-click buttons.
 - **Light / dark:** follows your system theme by default; the toggle in the header
   overrides it and the choice sticks.
 - Single self-contained HTML page, zero CDN dependencies: it works when the
@@ -178,10 +180,10 @@ status and change router settings, so only do that on a network you trust.
 API surface (all JSON): `GET /api/status`, `GET /api/net`,
 `POST /api/net {"mode": "lte"}`, `GET /api/ussd/codes`,
 `POST /api/ussd/send {"code": "*310#"}`, `POST /api/ussd/reply {"text": "1"}`,
-`POST /api/ussd/cancel`. Adding future write features (USSD, SMS, etc.)
-is one endpoint here plus one panel in `zlt/static/index.html`; the raw
-`client.post()` passthrough already handles CSRF and auth-retry for any
-`goformId` you capture from the stock UI.
+`POST /api/ussd/cancel`. USSD is the worked example of this pattern: adding
+another write feature (SMS, etc.) is one endpoint here plus one panel in
+`zlt/static/index.html`; the raw `client.post()` passthrough already handles
+CSRF and auth-retry for any `goformId` you capture from the stock UI.
 
 To keep the dashboard always up (so you can hit it from your phone without leaving
 a terminal open), see ["Running the dashboard on login"](#running-the-dashboard-on-login)

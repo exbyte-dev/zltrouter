@@ -110,6 +110,13 @@ def test_index_serves_dashboard():
     assert "Walk test" in r.text
 
 
+def test_index_has_ussd_panel():
+    r = make(StubClient()).get("/")
+    assert r.status_code == 200
+    assert 'id="ussd-panel"' in r.text
+    assert "/api/ussd/send" in r.text
+
+
 def test_web_deps_are_not_optional():
     """The dashboard is the point of the service, so it must not need an extra.
 

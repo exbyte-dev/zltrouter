@@ -108,6 +108,31 @@
   .row .v{font-family:var(--nums); font-size:14px}
   .row .v:empty::after{content:"—"; color:var(--faint)}
 
+  #ussd-saved{margin-bottom:12px}
+  #ussd-saved:empty{display:none}
+  .ussd-row{display:flex; gap:8px; margin-bottom:10px}
+  .ussd-input{
+    flex:1; min-width:0; font:inherit; font-size:14px; padding:8px 14px;
+    background:var(--surface); color:var(--ink);
+    border:1px solid var(--line); border-radius:8px;
+  }
+  .ussd-input::placeholder{color:var(--faint)}
+  .ussd-btn{
+    font:inherit; font-size:14px; padding:8px 16px; cursor:pointer;
+    background:var(--ink); color:var(--bg); border:1px solid var(--ink);
+    border-radius:8px; font-weight:500; transition:opacity .15s;
+  }
+  .ussd-btn:hover{opacity:.85}
+  .ussd-btn:disabled{opacity:.45; cursor:wait}
+  .ussd-btn-ghost{background:none; color:var(--muted); border:1px solid var(--line)}
+  .ussd-btn-ghost:hover{color:var(--poor); border-color:var(--poor); opacity:1}
+  .ussd-out{
+    background:var(--surface); border:1px solid var(--line); border-radius:10px;
+    padding:14px 16px; margin-bottom:10px; font-family:var(--nums); font-size:13px;
+    white-space:pre-wrap; word-break:break-word; color:var(--ink);
+  }
+  .ussd-out.error{color:var(--poor); border-color:var(--poor)}
+
   footer{display:flex; align-items:center; gap:18px; color:var(--faint); font-size:13px}
   footer button, footer select{
     font:inherit; font-size:13px; background:none; border:none; color:var(--muted);
@@ -169,6 +194,22 @@
   <section>
     <h2>Readings</h2>
     <div class="readings" id="readings"></div>
+  </section>
+
+  <section id="ussd-panel">
+    <h2>USSD</h2>
+    <div class="seg" id="ussd-saved"></div>
+    <form id="ussd-form" class="ussd-row">
+      <input id="ussd-code" class="ussd-input" placeholder="*310#" autocomplete="off">
+      <button type="submit" class="ussd-btn">Send</button>
+    </form>
+    <pre id="ussd-out" class="ussd-out" hidden></pre>
+    <form id="ussd-reply-form" class="ussd-row" hidden>
+      <input id="ussd-reply" class="ussd-input" placeholder="reply" autocomplete="off">
+      <button type="submit" class="ussd-btn">Reply</button>
+      <button type="button" id="ussd-cancel" class="ussd-btn ussd-btn-ghost">Cancel</button>
+    </form>
+    <div id="ussd-spinner" class="modehint" hidden>sending&hellip;</div>
   </section>
 
   <footer>
@@ -358,6 +399,78 @@ segButtons().forEach(btn => {
 });
 
 poll(); loadMode(); schedule();
+</script>
+
+<script>
+(function () {
+  "use strict";
+  const out = document.getElementById('ussd-out');
+  const sendForm = document.getElementById('ussd-form');
+  const codeInput = document.getElementById('ussd-code');
+  const replyForm = document.getElementById('ussd-reply-form');
+  const replyInput = document.getElementById('ussd-reply');
+  const spinner = document.getElementById('ussd-spinner');
+  const savedBox = document.getElementById('ussd-saved');
+
+  function show(result) {
+    out.hidden = false;
+    out.classList.toggle('error', result.state === 'error' || result.state === 'timeout');
+    out.textContent = result.state === 'timeout'
+      ? '(no response from network)'
+      : (result.state === 'error' ? 'USSD error: ' + result.text : result.text);
+    replyForm.hidden = result.state !== 'prompt';
+  }
+
+  async function call(url, payload) {
+    spinner.hidden = false;
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload ? JSON.stringify(payload) : undefined,
+      });
+      if (!r.ok) { show({ state: 'error', text: 'request failed (' + r.status + ')' }); return; }
+      show(await r.json());
+    } catch (e) {
+      show({ state: 'error', text: String(e) });
+    } finally {
+      spinner.hidden = true;
+    }
+  }
+
+  async function loadSaved() {
+    savedBox.innerHTML = '';
+    try {
+      const r = await fetch('/api/ussd/codes');
+      const data = await r.json();
+      for (const c of data.codes) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = c.label;
+        b.title = c.code;
+        b.onclick = () => call('/api/ussd/send', { code: c.code });
+        savedBox.appendChild(b);
+      }
+    } catch (e) { /* leave saved row empty */ }
+  }
+
+  sendForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const code = codeInput.value.trim();
+    if (code) call('/api/ussd/send', { code });
+  });
+  replyForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    call('/api/ussd/reply', { text: replyInput.value });
+    replyInput.value = '';
+  });
+  document.getElementById('ussd-cancel').addEventListener('click', () => {
+    call('/api/ussd/cancel', null).then(loadSaved);
+    replyForm.hidden = true;
+  });
+
+  loadSaved();
+})();
 </script>
 </body>
 </html>
