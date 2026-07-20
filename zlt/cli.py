@@ -192,7 +192,9 @@ def init_config(host: str, username: str, no_service: bool, password: str) -> No
         backend.install()
     except service_mod.ServiceError as exc:
         click.echo(f"Could not install the service: {exc}", err=True)
-        click.echo("Config is saved; retry with 'zlt service install'.", err=True)
+        click.echo("Your config is saved; only the autostart step failed. "
+                   "It is safe to retry\nwith 'zlt service install' at any time.",
+                   err=True)
         return
     click.echo(f"Installed {service_mod.SERVICE_NAME}:")
     click.echo(f"  local: http://127.0.0.1:{service_mod.DEFAULT_PORT}")

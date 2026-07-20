@@ -62,7 +62,9 @@ def _run(cmd: list[str], *, check: bool = True, capture: bool = False):
     except FileNotFoundError as exc:
         raise ServiceError(f"{cmd[0]} not found on this system: {exc}") from exc
     except subprocess.CalledProcessError as exc:
-        detail = (exc.stderr or "").strip() or f"exit status {exc.returncode}"
+        # schtasks writes some errors to stdout, so check both streams.
+        detail = ((exc.stderr or "").strip() or (exc.stdout or "").strip()
+                  or f"exit status {exc.returncode}")
         raise ServiceError(f"{' '.join(cmd)} failed: {detail}") from exc
 
 
@@ -335,9 +337,23 @@ class SchtasksBackend(Backend):
 
     def install(self) -> None:
         path = self._write_artifact()
-        _run(["schtasks", "/create", "/tn", SERVICE_NAME,
-              "/xml", str(path), "/f"])
-        _run(["schtasks", "/run", "/tn", SERVICE_NAME], check=False)
+        try:
+            # capture=True: schtasks narrates on both streams; keep its chatter
+            # out of our output and its error text in the exception instead.
+            _run(["schtasks", "/create", "/tn", SERVICE_NAME,
+                  "/xml", str(path), "/f"], capture=True)
+        except ServiceError as exc:
+            if "access is denied" in str(exc).lower():
+                raise ServiceError(
+                    "Task Scheduler refused to register the task: access is "
+                    "denied.\n"
+                    "This usually means the terminal is not elevated. Open a "
+                    "new terminal\n"
+                    "with 'Run as administrator' and run:  zlt service install"
+                ) from exc
+            raise
+        _run(["schtasks", "/run", "/tn", SERVICE_NAME],
+             check=False, capture=True)
 
     def uninstall(self) -> None:
         _run(["schtasks", "/end", "/tn", SERVICE_NAME], check=False)

@@ -49,6 +49,18 @@ def test_detect_backend_rejects_unknown_platform(monkeypatch):
     assert "sunos5" in str(exc.value)
 
 
+def test_run_reports_stdout_when_stderr_is_empty(monkeypatch):
+    # schtasks writes some errors to stdout; the message must not collapse to
+    # a bare "exit status 1" when stderr has nothing.
+    def boom(*_a, **_k):
+        raise subprocess.CalledProcessError(
+            1, ["schtasks"], output="ERROR: Access is denied.", stderr="")
+    monkeypatch.setattr(subprocess, "run", boom)
+    with pytest.raises(service.ServiceError) as exc:
+        service._run(["schtasks"], capture=True)
+    assert "Access is denied" in str(exc.value)
+
+
 def test_run_raises_service_error_on_missing_command(monkeypatch):
     def boom(*_a, **_k):
         raise FileNotFoundError("no such tool")
@@ -242,6 +254,30 @@ def test_schtasks_xml_written_as_utf16(tmp_path, monkeypatch):
     backend.install()
     raw = backend.artifact_path().read_bytes()
     assert raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff")
+
+
+def test_schtasks_install_access_denied_says_run_as_administrator(
+        tmp_path, monkeypatch):
+    # An unelevated terminal is the one failure ordinary users hit; the raw
+    # "Access is denied" must come back with the actual fix attached.
+    def deny(cmd, **_kw):
+        raise service.ServiceError(f"{' '.join(cmd)} failed: ERROR: Access is denied.")
+    monkeypatch.setattr(service, "_run", deny)
+    with pytest.raises(service.ServiceError) as exc:
+        _schtasks(tmp_path, monkeypatch).install()
+    message = str(exc.value)
+    assert "Run as administrator" in message
+    assert "zlt service install" in message
+
+
+def test_schtasks_install_other_errors_pass_through(tmp_path, monkeypatch):
+    def fail(cmd, **_kw):
+        raise service.ServiceError(f"{' '.join(cmd)} failed: ERROR: The task XML is malformed.")
+    monkeypatch.setattr(service, "_run", fail)
+    with pytest.raises(service.ServiceError) as exc:
+        _schtasks(tmp_path, monkeypatch).install()
+    assert "malformed" in str(exc.value)
+    assert "administrator" not in str(exc.value).lower()
 
 
 def test_schtasks_suspend_disables_task(tmp_path, monkeypatch):
