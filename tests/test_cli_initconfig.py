@@ -28,6 +28,10 @@ def installed(monkeypatch):
     calls = []
 
     class FakeBackend:
+        # detect_backend() in init_config is called with no args, so a real
+        # backend would default to DEFAULT_BIND ("0.0.0.0") here too.
+        host = "0.0.0.0"
+
         def install(self):
             calls.append("install")
 
@@ -45,6 +49,19 @@ def test_prompt_defaults_to_yes_on_bare_enter(monkeypatch, tmp_path, installed):
     result = CliRunner().invoke(cli, ["init-config"], input="s3cret\n\n")
     assert result.exit_code == 0
     assert installed == ["install"]
+
+
+def test_install_success_discloses_lan_and_no_auth(monkeypatch, tmp_path, installed):
+    # detect_backend() defaults to host 0.0.0.0 here, so the success message
+    # must not just say 127.0.0.1; it must disclose LAN reachability and the
+    # lack of any login, since a user hitting Enter through the defaults
+    # never typed a --host flag to warn them.
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    result = CliRunner().invoke(cli, ["init-config"], input="s3cret\n\n")
+    assert result.exit_code == 0
+    assert "127.0.0.1" in result.output
+    assert "LAN" in result.output
+    assert "no auth" in result.output
 
 
 def test_prompt_declined_leaves_service_alone(monkeypatch, tmp_path, installed):

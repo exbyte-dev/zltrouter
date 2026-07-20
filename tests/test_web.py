@@ -1,12 +1,9 @@
 """Web layer tests. All router traffic is faked via a stub client."""
 
-import pytest
+from fastapi.testclient import TestClient
 
-fastapi = pytest.importorskip("fastapi")
-from fastapi.testclient import TestClient  # noqa: E402
-
-from zlt.client import LockedOut, LoginError, RouterUnreachable  # noqa: E402
-from zlt.web import create_app  # noqa: E402
+from zlt.client import LockedOut, LoginError, RouterUnreachable
+from zlt.web import create_app
 
 
 class StubConfig:

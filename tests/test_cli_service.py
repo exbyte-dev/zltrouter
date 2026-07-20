@@ -41,6 +41,23 @@ def test_service_verbs_delegate_to_backend(fake, verb):
     assert fake.calls == [verb]
 
 
+def test_install_shows_local_and_lan_for_default_host(fake):
+    result = CliRunner().invoke(cli, ["service", "install"])
+    assert result.exit_code == 0, result.output
+    assert "local: http://127.0.0.1:8464" in result.output
+    assert "LAN:   http://<this machine's IP>:8464" in result.output
+
+
+def test_install_shows_bound_interface_for_specific_host(fake):
+    # Binding to one specific interface means the dashboard is NOT reachable
+    # at 127.0.0.1, so the printed line must reflect the actual bind_host.
+    result = CliRunner().invoke(cli, ["service", "install", "--host", "192.168.1.50"])
+    assert result.exit_code == 0, result.output
+    assert "local: http://192.168.1.50:8464" in result.output
+    assert "127.0.0.1" not in result.output
+    assert "LAN:" not in result.output
+
+
 def test_print_artifact_writes_nothing_and_prints_unit(fake):
     result = CliRunner().invoke(cli, ["service", "print-artifact"])
     assert result.exit_code == 0

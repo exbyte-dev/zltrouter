@@ -194,8 +194,13 @@ def init_config(host: str, username: str, no_service: bool, password: str) -> No
         click.echo(f"Could not install the service: {exc}", err=True)
         click.echo("Config is saved; retry with 'zlt service install'.", err=True)
         return
-    click.echo(f"Installed {service_mod.SERVICE_NAME}: "
-               f"http://127.0.0.1:{service_mod.DEFAULT_PORT}")
+    click.echo(f"Installed {service_mod.SERVICE_NAME}:")
+    click.echo(f"  local: http://127.0.0.1:{service_mod.DEFAULT_PORT}")
+    if backend.host == "0.0.0.0":
+        click.echo(f"  LAN:   http://<this machine's IP>:{service_mod.DEFAULT_PORT}   "
+                   "(phone, tablet)")
+        click.echo("  Note: the dashboard has no auth of its own; anyone on the LAN "
+                   "who can reach this port can change router settings.")
 
 
 @cli.command()
@@ -264,9 +269,11 @@ def service_install(bind_host: str, port: int) -> None:
     """Install and start the dashboard service."""
     backend = _do("install", bind_host, port)
     click.echo(f"Installed {service_mod.SERVICE_NAME}, starting on login.")
-    click.echo(f"  local: http://127.0.0.1:{port}")
     if bind_host == "0.0.0.0":
+        click.echo(f"  local: http://127.0.0.1:{port}")
         click.echo(f"  LAN:   http://<this machine's IP>:{port}   (phone, tablet)")
+    else:
+        click.echo(f"  local: http://{bind_host}:{port}")
     click.echo(f"  unit:  {backend.artifact_path()}")
 
 

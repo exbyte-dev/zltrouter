@@ -10,10 +10,11 @@ from zlt import service
 def test_resolve_prefers_sibling_of_sys_executable(monkeypatch, tmp_path):
     binroot = tmp_path / "venv" / "bin"
     binroot.mkdir(parents=True)
-    (binroot / "zlt").write_text("#!/bin/sh\n")
+    name = "zlt.exe" if sys.platform == "win32" else "zlt"
+    (binroot / name).write_text("#!/bin/sh\n")
     monkeypatch.setattr(sys, "executable", str(binroot / "python"))
     monkeypatch.setattr(service.shutil, "which", lambda _n: "/usr/bin/zlt")
-    assert service.resolve_zlt_binary() == binroot / "zlt"
+    assert service.resolve_zlt_binary() == binroot / name
 
 
 def test_resolve_falls_back_to_path(monkeypatch, tmp_path):
@@ -202,6 +203,22 @@ def test_schtasks_xml_is_valid_and_triggers_on_logon(tmp_path, monkeypatch):
     assert args.startswith("serve --host 0.0.0.0 --port 8464 --log-file ")
     assert root.find(".//t:RestartOnFailure/t:Count", TASK_NS).text == "3"
     assert root.find(".//t:Settings/t:Hidden", TASK_NS).text == "true"
+
+
+def test_schtasks_render_escapes_xml_entities(tmp_path, monkeypatch):
+    # A path or description containing '&' or '<' (e.g. a Windows username
+    # with an ampersand) must not break the generated XML.
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.setattr(service, "DESCRIPTION", "zlt dashboard <local> & friends")
+    backend = service.SchtasksBackend(
+        Path(r"C:\Users\Bob & Alice\bin\zlt.exe"), "0.0.0.0", 8464)
+    xml_text = backend.render()
+    # This is the concrete failure mode being fixed: unescaped '&'/'<' would
+    # make this raise instead of parsing cleanly.
+    root = ET.fromstring(xml_text.encode("utf-16"))
+    assert root.find(".//t:Exec/t:Command", TASK_NS).text == r"C:\Users\Bob & Alice\bin\zlt.exe"
+    assert root.find(".//t:RegistrationInfo/t:Description", TASK_NS).text == (
+        "zlt dashboard <local> & friends")
 
 
 def test_schtasks_install_registers_task(tmp_path, monkeypatch):

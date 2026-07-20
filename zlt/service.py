@@ -20,6 +20,7 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from zlt.config import config_home
 
@@ -273,14 +274,17 @@ class SchtasksBackend(Backend):
         return self._state_dir() / f"{SERVICE_NAME}.log"
 
     def render(self) -> str:
-        args = (f"serve --host {self.host} --port {self.port} "
-                f"--log-file {self.log_path()}")
+        raw_args = (f"serve --host {self.host} --port {self.port} "
+                    f"--log-file {self.log_path()}")
+        description = escape(DESCRIPTION)
+        command = escape(str(self.exec_path))
+        args = escape(raw_args)
         return (
             '<?xml version="1.0" encoding="UTF-16"?>\n'
             '<Task version="1.2" '
             'xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">\n'
             "  <RegistrationInfo>\n"
-            f"    <Description>{DESCRIPTION}</Description>\n"
+            f"    <Description>{description}</Description>\n"
             "  </RegistrationInfo>\n"
             "  <Triggers>\n"
             "    <LogonTrigger>\n"
@@ -307,7 +311,7 @@ class SchtasksBackend(Backend):
             "  </Settings>\n"
             '  <Actions Context="Author">\n'
             "    <Exec>\n"
-            f"      <Command>{self.exec_path}</Command>\n"
+            f"      <Command>{command}</Command>\n"
             f"      <Arguments>{args}</Arguments>\n"
             "    </Exec>\n"
             "  </Actions>\n"
