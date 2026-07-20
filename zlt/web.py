@@ -17,6 +17,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from zlt import ussd_store
 from zlt.client import (
     BEARER_MAP,
     BEARER_REVERSE,
@@ -27,12 +28,21 @@ from zlt.client import (
     LoginError,
     RouterError,
     RouterUnreachable,
+    UssdError,
     ZltClient,
 )
 
 
 class ModeBody(BaseModel):
     mode: str
+
+
+class UssdSendBody(BaseModel):
+    code: str
+
+
+class UssdReplyBody(BaseModel):
+    text: str
 
 
 def _resolve_configured(data: dict) -> str:
@@ -58,6 +68,8 @@ def create_app(client: ZltClient) -> FastAPI:
             raise HTTPException(status_code=423, detail=str(exc))
         except LoginError as exc:
             raise HTTPException(status_code=401, detail=str(exc))
+        except UssdError as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
         except RouterError as exc:
             raise HTTPException(status_code=502, detail=str(exc))
         except RouterUnreachable as exc:
@@ -134,6 +146,41 @@ def create_app(client: ZltClient) -> FastAPI:
                 "configured": configured,
                 "friendly": BEARER_REVERSE.get(configured, ""),
             }
+
+        return _guard(work)
+
+    @app.get("/api/ussd/codes")
+    def ussd_codes() -> dict:
+        return {"codes": ussd_store.load_codes()}
+
+    @app.post("/api/ussd/send")
+    def ussd_send(body: UssdSendBody) -> dict:
+        code = body.code.strip()
+        if not code:
+            raise HTTPException(status_code=422, detail="empty USSD code")
+
+        def work():
+            with lock:
+                return client.ussd_send(code)
+
+        result = _guard(work)
+        return {"text": result.text, "state": result.state}
+
+    @app.post("/api/ussd/reply")
+    def ussd_reply(body: UssdReplyBody) -> dict:
+        def work():
+            with lock:
+                return client.ussd_reply(body.text.strip())
+
+        result = _guard(work)
+        return {"text": result.text, "state": result.state}
+
+    @app.post("/api/ussd/cancel")
+    def ussd_cancel() -> dict:
+        def work():
+            with lock:
+                client.ussd_cancel()
+                return {"ok": True}
 
         return _guard(work)
 

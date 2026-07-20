@@ -176,7 +176,9 @@ own**. If you bind `0.0.0.0`, anyone on the LAN who can reach the port can read
 status and change router settings, so only do that on a network you trust.
 
 API surface (all JSON): `GET /api/status`, `GET /api/net`,
-`POST /api/net {"mode": "lte"}`. Adding future write features (USSD, SMS, etc.)
+`POST /api/net {"mode": "lte"}`, `GET /api/ussd/codes`,
+`POST /api/ussd/send {"code": "*310#"}`, `POST /api/ussd/reply {"text": "1"}`,
+`POST /api/ussd/cancel`. Adding future write features (USSD, SMS, etc.)
 is one endpoint here plus one panel in `zlt/static/index.html`; the raw
 `client.post()` passthrough already handles CSRF and auth-retry for any
 `goformId` you capture from the stock UI.
