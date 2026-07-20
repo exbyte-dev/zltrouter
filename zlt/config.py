@@ -29,6 +29,10 @@ def session_path() -> Path:
     return _state_home() / "zlt" / "session.json"
 
 
+def ussd_store_path() -> Path:
+    return config_home() / "zlt" / "ussd.json"
+
+
 def _parse_env_file(path: Path) -> dict[str, str]:
     data: dict[str, str] = {}
     try:
