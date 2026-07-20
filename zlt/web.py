@@ -5,8 +5,7 @@ to the router directly: the reqproc API sends no CORS headers and the session
 cookie belongs to the router's origin. Everything auth-related (nonce login,
 CSRF, lockout guard, session cache) is delegated to the existing client.
 
-Requires the optional web extra:  pip install 'zlt[web]'
-Launched via:                     zlt serve
+Launched via 'zlt serve', or automatically on login via 'zlt service install'.
 """
 
 from __future__ import annotations
@@ -14,14 +13,9 @@ from __future__ import annotations
 import threading
 from importlib import resources
 
-try:
-    from fastapi import FastAPI, HTTPException
-    from fastapi.responses import HTMLResponse
-    from pydantic import BaseModel
-except ImportError as exc:  # pragma: no cover
-    raise ImportError(
-        "the web dashboard needs the optional web extra: pip install 'zlt[web]'"
-    ) from exc
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 
 from zlt.client import (
     BEARER_MAP,

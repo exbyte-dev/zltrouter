@@ -111,3 +111,20 @@ def test_index_serves_dashboard():
     r = make(StubClient()).get("/")
     assert r.status_code == 200
     assert "Walk test" in r.text
+
+
+def test_web_deps_are_not_optional():
+    """The dashboard is the point of the service, so it must not need an extra.
+
+    'pipx install zlt[web]' cannot be typed portably: single quotes are not
+    quote characters in Windows cmd.exe. Keep these as regular dependencies.
+    """
+    import tomllib
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    data = tomllib.loads((root / "pyproject.toml").read_text())
+    deps = " ".join(data["project"]["dependencies"])
+    assert "fastapi" in deps
+    assert "uvicorn" in deps
+    assert "web" not in data["project"].get("optional-dependencies", {})
