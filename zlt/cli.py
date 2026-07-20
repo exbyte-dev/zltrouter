@@ -149,11 +149,18 @@ def login(client: ZltClient) -> None:
     click.echo("Logged in; session cached.")
 
 
+def _stdin_is_tty() -> bool:
+    # Its own function so tests can force it; CliRunner always reports False.
+    return sys.stdin.isatty()
+
+
 @cli.command("init-config")
 @click.option("--host", default=DEFAULT_HOST, show_default=True)
 @click.option("--username", default=DEFAULT_USERNAME, show_default=True)
+@click.option("--no-service", is_flag=True,
+              help="Skip the offer to run the dashboard on login.")
 @click.password_option(confirmation_prompt=False, help="Router admin password")
-def init_config(host: str, username: str, password: str) -> None:
+def init_config(host: str, username: str, no_service: bool, password: str) -> None:
     """Write ~/.config/zlt/config (chmod 600)."""
     path = config_path()
     try:
@@ -165,6 +172,30 @@ def init_config(host: str, username: str, password: str) -> None:
     except OSError as exc:
         raise click.ClickException(f"could not write {path}: {exc}")
     click.echo(f"Wrote {path}")
+
+    if no_service or not _stdin_is_tty():
+        return
+
+    try:
+        backend = service_mod.detect_backend()
+    except service_mod.ServiceError as exc:
+        # Not fatal: the config is written, they just get no autostart offer.
+        click.echo(f"\nSkipping the dashboard service: {exc}")
+        return
+
+    click.echo()
+    if not click.confirm("Start the dashboard on login?", default=True):
+        click.echo("Skipped. Run 'zlt service install' whenever you want it.")
+        return
+
+    try:
+        backend.install()
+    except service_mod.ServiceError as exc:
+        click.echo(f"Could not install the service: {exc}", err=True)
+        click.echo("Config is saved; retry with 'zlt service install'.", err=True)
+        return
+    click.echo(f"Installed {service_mod.SERVICE_NAME}: "
+               f"http://127.0.0.1:{service_mod.DEFAULT_PORT}")
 
 
 @cli.command()
