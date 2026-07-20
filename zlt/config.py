@@ -13,7 +13,7 @@ class Config:
     password: str | None
 
 
-def _config_home() -> Path:
+def config_home() -> Path:
     return Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config"))
 
 
@@ -22,7 +22,7 @@ def _state_home() -> Path:
 
 
 def config_path() -> Path:
-    return _config_home() / "zlt" / "config"
+    return config_home() / "zlt" / "config"
 
 
 def session_path() -> Path:
