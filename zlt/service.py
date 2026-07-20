@@ -11,6 +11,8 @@ tests have a single seam to monkeypatch and never mutate real system state.
 
 from __future__ import annotations
 
+import os
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -191,8 +193,64 @@ class SystemdBackend(Backend):
         _run(["journalctl", "--user", "-u", SERVICE_NAME, "-f"], check=False)
 
 
-class LaunchdBackend(SystemdBackend):
-    pass
+class LaunchdBackend(Backend):
+    """macOS. LaunchAgent in the user's gui domain, loaded at login."""
+
+    def artifact_path(self) -> Path:
+        return Path.home() / "Library" / "LaunchAgents" / f"{LAUNCHD_LABEL}.plist"
+
+    def log_path(self) -> Path:
+        # launchd has no journal, so redirect both streams to a file.
+        return Path.home() / "Library" / "Logs" / f"{SERVICE_NAME}.log"
+
+    def _domain(self) -> str:
+        return f"gui/{os.getuid()}"
+
+    def _target(self) -> str:
+        return f"{self._domain()}/{LAUNCHD_LABEL}"
+
+    def render(self) -> str:
+        plist = {
+            "Label": LAUNCHD_LABEL,
+            "ProgramArguments": [
+                str(self.exec_path), "serve",
+                "--host", self.host,
+                "--port", str(self.port),
+            ],
+            "RunAtLoad": True,
+            "KeepAlive": {"SuccessfulExit": False},
+            "StandardOutPath": str(self.log_path()),
+            "StandardErrorPath": str(self.log_path()),
+            "ProcessType": "Background",
+        }
+        return plistlib.dumps(plist).decode("utf-8")
+
+    @property
+    def suspend_note(self) -> str:
+        return "unloaded; it stays down until you run 'zlt service resume'"
+
+    def install(self) -> None:
+        self.log_path().parent.mkdir(parents=True, exist_ok=True)
+        path = self._write_artifact()
+        # Tolerate a previous load so install is repeatable.
+        _run(["launchctl", "bootout", self._target()], check=False)
+        _run(["launchctl", "bootstrap", self._domain(), str(path)])
+
+    def uninstall(self) -> None:
+        _run(["launchctl", "bootout", self._target()], check=False)
+        self.artifact_path().unlink(missing_ok=True)
+
+    def suspend(self) -> None:
+        _run(["launchctl", "bootout", self._target()])
+
+    def resume(self) -> None:
+        _run(["launchctl", "bootstrap", self._domain(), str(self.artifact_path())])
+
+    def status(self) -> None:
+        _run(["launchctl", "print", self._target()], check=False)
+
+    def logs(self) -> None:
+        _tail(self.log_path())
 
 
 class SchtasksBackend(SystemdBackend):

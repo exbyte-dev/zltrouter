@@ -110,3 +110,48 @@ def test_systemd_uninstall_removes_unit(tmp_path, monkeypatch):
 
 def test_systemd_suspend_note_mentions_next_login(tmp_path, monkeypatch):
     assert "login" in _systemd(tmp_path, monkeypatch).suspend_note
+
+
+import plistlib
+
+
+def _launchd(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path))
+    return service.LaunchdBackend(Path("/opt/pipx/bin/zlt"), "0.0.0.0", 8464)
+
+
+def test_launchd_plist_is_valid_and_autostarts(tmp_path, monkeypatch):
+    backend = _launchd(tmp_path, monkeypatch)
+    plist = plistlib.loads(backend.render().encode("utf-8"))
+    assert plist["Label"] == "dev.zlt.web"
+    assert plist["ProgramArguments"] == [
+        "/opt/pipx/bin/zlt", "serve", "--host", "0.0.0.0", "--port", "8464"]
+    assert plist["RunAtLoad"] is True
+    # launchd's nearest equivalent of systemd's Restart=on-failure
+    assert plist["KeepAlive"] == {"SuccessfulExit": False}
+    assert plist["StandardOutPath"] == str(backend.log_path())
+    assert plist["StandardErrorPath"] == str(backend.log_path())
+
+
+def test_launchd_artifact_path(tmp_path, monkeypatch):
+    backend = _launchd(tmp_path, monkeypatch)
+    assert backend.artifact_path() == (
+        tmp_path / "Library" / "LaunchAgents" / "dev.zlt.web.plist")
+
+
+def test_launchd_install_bootstraps_into_gui_domain(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(service, "_run", lambda cmd, **kw: calls.append(cmd))
+    monkeypatch.setattr(service.os, "getuid", lambda: 501, raising=False)
+    backend = _launchd(tmp_path, monkeypatch)
+    backend.install()
+    assert backend.artifact_path().exists()
+    assert ["launchctl", "bootstrap", "gui/501",
+            str(backend.artifact_path())] in calls
+
+
+def test_launchd_suspend_note_says_it_stays_down(tmp_path, monkeypatch):
+    # bootout unloads the agent, so unlike systemd it does NOT return at login
+    note = _launchd(tmp_path, monkeypatch).suspend_note
+    assert "resume" in note
+    assert "login" not in note
