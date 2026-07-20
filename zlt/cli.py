@@ -7,6 +7,7 @@ import click
 
 from zlt import __version__
 from zlt import service as service_mod
+from zlt import ussd_store
 from zlt.client import (
     BEARER_MAP,
     FULL_EXTRA,
@@ -16,6 +17,7 @@ from zlt.client import (
     LoginError,
     RouterError,
     RouterUnreachable,
+    UssdResult,
     ZltClient,
 )
 from zlt.config import DEFAULT_HOST, DEFAULT_USERNAME, config_path, load_config
@@ -116,6 +118,108 @@ def net_set(client: ZltClient, mode: str) -> None:
         raise click.ClickException(str(exc))
     now = confirm.get("net_select") or confirm.get("net_select_mode") or confirm.get("m_netselect_save") or ""
     click.echo(f"OK — set to {mode} ({value}); router now reports {now or 'unknown'}")
+
+
+def _print_ussd(result: UssdResult) -> None:
+    if result.state == "timeout":
+        click.echo("(no response from network)")
+        return
+    if result.state == "error":
+        click.echo(f"USSD error: {result.text}".rstrip())
+        return
+    click.echo(result.text)
+
+
+def _ussd_flow(client: ZltClient, code: str) -> None:
+    try:
+        result = client.ussd_send(code)
+        while True:
+            _print_ussd(result)
+            if result.state != "prompt":
+                return
+            if not _stdin_is_tty():
+                return
+            try:
+                reply = click.prompt("reply", prompt_suffix="> ",
+                                     default="", show_default=False)
+            except (click.Abort, EOFError):
+                client.ussd_cancel()
+                click.echo("cancelled")
+                return
+            if reply.strip() == "":
+                client.ussd_cancel()
+                click.echo("cancelled")
+                return
+            result = client.ussd_reply(reply.strip())
+    except (LoginError, LockedOut, RouterUnreachable) as exc:
+        raise click.ClickException(str(exc))
+
+
+@cli.group()
+def ussd() -> None:
+    """Send USSD codes and manage saved ones."""
+
+
+@ussd.command("send")
+@click.argument("code")
+@click.pass_obj
+def ussd_send_cmd(client: ZltClient, code: str) -> None:
+    """Send a USSD code (e.g. zlt ussd send '*310#')."""
+    _ussd_flow(client, code)
+
+
+@ussd.command("cancel")
+@click.pass_obj
+def ussd_cancel_cmd(client: ZltClient) -> None:
+    """Cancel the active USSD session."""
+    try:
+        client.ussd_cancel()
+    except (LoginError, LockedOut, RouterUnreachable) as exc:
+        raise click.ClickException(str(exc))
+    click.echo("cancelled")
+
+
+@ussd.command("run")
+@click.argument("label")
+@click.pass_obj
+def ussd_run_cmd(client: ZltClient, label: str) -> None:
+    """Run a saved code by label."""
+    match = next((c for c in ussd_store.load_codes()
+                  if c["label"].lower() == label.strip().lower()), None)
+    if match is None:
+        raise click.ClickException(f"no saved code labelled '{label}'")
+    _ussd_flow(client, match["code"])
+
+
+@ussd.command("list")
+def ussd_list_cmd() -> None:
+    """List saved USSD codes."""
+    codes = ussd_store.load_codes()
+    if not codes:
+        click.echo("(no saved codes)")
+        return
+    width = max(len(c["label"]) for c in codes)
+    for c in codes:
+        click.echo(f"  {c['label']:<{width}}  {c['code']}")
+
+
+@ussd.command("save")
+@click.argument("label")
+@click.argument("code")
+def ussd_save_cmd(label: str, code: str) -> None:
+    """Save a code under a label."""
+    ussd_store.save_code(label, code)
+    click.echo(f"Saved {label!r} -> {code}")
+
+
+@ussd.command("rm")
+@click.argument("label")
+def ussd_rm_cmd(label: str) -> None:
+    """Remove a saved code by label."""
+    if ussd_store.remove_code(label):
+        click.echo(f"Removed {label!r}")
+    else:
+        raise click.ClickException(f"no saved code labelled '{label}'")
 
 
 @cli.command()
