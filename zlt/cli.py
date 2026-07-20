@@ -1,5 +1,7 @@
 import json
 import os as _os
+import sys
+from pathlib import Path
 
 import click
 
@@ -168,19 +170,33 @@ def init_config(host: str, username: str, password: str) -> None:
 @click.option("--host", "bind_host", default="127.0.0.1", show_default=True,
               help="Interface to bind. Use 0.0.0.0 to reach it from your phone on the LAN.")
 @click.option("--port", default=8464, show_default=True)
+@click.option("--log-file", type=click.Path(dir_okay=False, path_type=Path),
+              default=None,
+              help="Append output to this file. Used by the Windows service "
+                   "backend, which has no journal of its own.")
 @click.pass_obj
-def serve(client: ZltClient, bind_host: str, port: int) -> None:
+def serve(client: ZltClient, bind_host: str, port: int, log_file: Path | None) -> None:
     """Serve the local web dashboard (needs: pip install 'zlt[web]')."""
     try:
         import uvicorn
 
         from zlt.web import create_app
-    except ImportError:
-        raise click.ClickException(
-            "web extras not installed — run: .venv/bin/pip install -e '.[web]'"
-        )
-    click.echo(f"Dashboard on http://{bind_host}:{port} — router at {client.config.host}")
-    if bind_host != "127.0.0.1":
-        click.echo("Note: the dashboard has no auth of its own; anyone on the LAN "
-                   "who can reach this port can change router settings.")
-    uvicorn.run(create_app(client), host=bind_host, port=port, log_level="warning")
+    except ImportError as exc:
+        raise click.ClickException(f"could not import the web dashboard: {exc}")
+
+    stream = None
+    saved = (sys.stdout, sys.stderr)
+    if log_file is not None:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        stream = open(log_file, "a", buffering=1, encoding="utf-8")
+        sys.stdout = sys.stderr = stream
+    try:
+        click.echo(f"Dashboard on http://{bind_host}:{port} - router at {client.config.host}")
+        if bind_host != "127.0.0.1":
+            click.echo("Note: the dashboard has no auth of its own; anyone on the LAN "
+                       "who can reach this port can change router settings.")
+        uvicorn.run(create_app(client), host=bind_host, port=port, log_level="warning")
+    finally:
+        sys.stdout, sys.stderr = saved
+        if stream is not None:
+            stream.close()

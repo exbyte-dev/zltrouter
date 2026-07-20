@@ -180,3 +180,51 @@ def test_launchd_resume_is_tolerant_of_already_running(tmp_path, monkeypatch):
     assert calls == [
         (["launchctl", "bootstrap", "gui/501", str(backend.artifact_path())],
          {"check": False})]
+
+
+import xml.etree.ElementTree as ET
+
+TASK_NS = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
+
+
+def _schtasks(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    return service.SchtasksBackend(Path(r"C:\pipx\bin\zlt.exe"), "0.0.0.0", 8464)
+
+
+def test_schtasks_xml_is_valid_and_triggers_on_logon(tmp_path, monkeypatch):
+    backend = _schtasks(tmp_path, monkeypatch)
+    # The declaration says UTF-16, so encode to match before parsing.
+    root = ET.fromstring(backend.render().encode("utf-16"))
+    assert root.find(".//t:LogonTrigger/t:Enabled", TASK_NS).text == "true"
+    assert root.find(".//t:Exec/t:Command", TASK_NS).text == r"C:\pipx\bin\zlt.exe"
+    args = root.find(".//t:Exec/t:Arguments", TASK_NS).text
+    assert args.startswith("serve --host 0.0.0.0 --port 8464 --log-file ")
+    assert root.find(".//t:RestartOnFailure/t:Count", TASK_NS).text == "3"
+    assert root.find(".//t:Settings/t:Hidden", TASK_NS).text == "true"
+
+
+def test_schtasks_install_registers_task(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(service, "_run", lambda cmd, **kw: calls.append(cmd))
+    backend = _schtasks(tmp_path, monkeypatch)
+    backend.install()
+    assert backend.artifact_path().exists()
+    assert ["schtasks", "/create", "/tn", "zlt-web",
+            "/xml", str(backend.artifact_path()), "/f"] in calls
+
+
+def test_schtasks_xml_written_as_utf16(tmp_path, monkeypatch):
+    # schtasks /xml rejects a file whose encoding disagrees with its declaration
+    monkeypatch.setattr(service, "_run", lambda cmd, **kw: None)
+    backend = _schtasks(tmp_path, monkeypatch)
+    backend.install()
+    raw = backend.artifact_path().read_bytes()
+    assert raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff")
+
+
+def test_schtasks_suspend_disables_task(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(service, "_run", lambda cmd, **kw: calls.append(cmd))
+    _schtasks(tmp_path, monkeypatch).suspend()
+    assert ["schtasks", "/change", "/tn", "zlt-web", "/disable"] in calls

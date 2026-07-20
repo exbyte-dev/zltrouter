@@ -256,5 +256,97 @@ class LaunchdBackend(Backend):
         _tail(self.log_path())
 
 
-class SchtasksBackend(SystemdBackend):
-    pass
+class SchtasksBackend(Backend):
+    """Windows. Task Scheduler on-logon task, registered from an XML file."""
+
+    def _state_dir(self) -> Path:
+        base = os.environ.get("LOCALAPPDATA")
+        root = Path(base) if base else Path.home() / "AppData" / "Local"
+        return root / "zlt"
+
+    def artifact_path(self) -> Path:
+        return self._state_dir() / f"{SERVICE_NAME}.xml"
+
+    def log_path(self) -> Path:
+        # Task Scheduler captures nothing, so serve --log-file does the work.
+        return self._state_dir() / f"{SERVICE_NAME}.log"
+
+    def render(self) -> str:
+        args = (f"serve --host {self.host} --port {self.port} "
+                f"--log-file {self.log_path()}")
+        return (
+            '<?xml version="1.0" encoding="UTF-16"?>\n'
+            '<Task version="1.2" '
+            'xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">\n'
+            "  <RegistrationInfo>\n"
+            f"    <Description>{DESCRIPTION}</Description>\n"
+            "  </RegistrationInfo>\n"
+            "  <Triggers>\n"
+            "    <LogonTrigger>\n"
+            "      <Enabled>true</Enabled>\n"
+            "    </LogonTrigger>\n"
+            "  </Triggers>\n"
+            "  <Principals>\n"
+            '    <Principal id="Author">\n'
+            "      <LogonType>InteractiveToken</LogonType>\n"
+            "      <RunLevel>LeastPrivilege</RunLevel>\n"
+            "    </Principal>\n"
+            "  </Principals>\n"
+            "  <Settings>\n"
+            "    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>\n"
+            "    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>\n"
+            "    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>\n"
+            "    <StartWhenAvailable>true</StartWhenAvailable>\n"
+            "    <Hidden>true</Hidden>\n"
+            "    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>\n"
+            "    <RestartOnFailure>\n"
+            "      <Interval>PT1M</Interval>\n"
+            "      <Count>3</Count>\n"
+            "    </RestartOnFailure>\n"
+            "  </Settings>\n"
+            '  <Actions Context="Author">\n'
+            "    <Exec>\n"
+            f"      <Command>{self.exec_path}</Command>\n"
+            f"      <Arguments>{args}</Arguments>\n"
+            "    </Exec>\n"
+            "  </Actions>\n"
+            "</Task>\n"
+        )
+
+    @property
+    def suspend_note(self) -> str:
+        return "disabled; it comes back on 'resume'"
+
+    def _write_artifact(self) -> Path:
+        # Override: schtasks /xml rejects a file whose bytes disagree with the
+        # UTF-16 declaration in render(), so this one is not written as UTF-8.
+        path = self.artifact_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(self.render(), encoding="utf-16")
+        return path
+
+    def install(self) -> None:
+        path = self._write_artifact()
+        _run(["schtasks", "/create", "/tn", SERVICE_NAME,
+              "/xml", str(path), "/f"])
+        _run(["schtasks", "/run", "/tn", SERVICE_NAME], check=False)
+
+    def uninstall(self) -> None:
+        _run(["schtasks", "/end", "/tn", SERVICE_NAME], check=False)
+        _run(["schtasks", "/delete", "/tn", SERVICE_NAME, "/f"], check=False)
+        self.artifact_path().unlink(missing_ok=True)
+
+    def suspend(self) -> None:
+        _run(["schtasks", "/end", "/tn", SERVICE_NAME], check=False)
+        _run(["schtasks", "/change", "/tn", SERVICE_NAME, "/disable"])
+
+    def resume(self) -> None:
+        _run(["schtasks", "/change", "/tn", SERVICE_NAME, "/enable"])
+        _run(["schtasks", "/run", "/tn", SERVICE_NAME], check=False)
+
+    def status(self) -> None:
+        _run(["schtasks", "/query", "/tn", SERVICE_NAME, "/v", "/fo", "list"],
+             check=False)
+
+    def logs(self) -> None:
+        _tail(self.log_path())
