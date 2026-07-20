@@ -1,6 +1,6 @@
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -70,7 +70,10 @@ def _parse_unit(text: str) -> configparser.ConfigParser:
 
 def _systemd(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    return service.SystemdBackend(Path("/opt/pipx/bin/zlt"), "0.0.0.0", 8464)
+    # PurePosixPath, not Path: this backend only ever sees POSIX exec paths in
+    # production, and str(Path("/opt/...")) turns into backslashes on a
+    # Windows test runner, breaking the exact-string assertions below.
+    return service.SystemdBackend(PurePosixPath("/opt/pipx/bin/zlt"), "0.0.0.0", 8464)
 
 
 def test_systemd_unit_is_valid_and_autostarts(tmp_path, monkeypatch):
@@ -118,7 +121,8 @@ import plistlib
 
 def _launchd(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path))
-    return service.LaunchdBackend(Path("/opt/pipx/bin/zlt"), "0.0.0.0", 8464)
+    # PurePosixPath, not Path: same reasoning as _systemd() above.
+    return service.LaunchdBackend(PurePosixPath("/opt/pipx/bin/zlt"), "0.0.0.0", 8464)
 
 
 def test_launchd_plist_is_valid_and_autostarts(tmp_path, monkeypatch):

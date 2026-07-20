@@ -19,7 +19,7 @@ import subprocess
 import sys
 import time
 from abc import ABC, abstractmethod
-from pathlib import Path
+from pathlib import Path, PurePath
 from xml.sax.saxutils import escape
 
 from zlt.config import config_home
@@ -83,7 +83,10 @@ def _tail(path: Path) -> None:
 class Backend(ABC):
     """One autostart mechanism. Subclasses are per-platform."""
 
-    def __init__(self, exec_path: Path, host: str, port: int) -> None:
+    def __init__(self, exec_path: PurePath, host: str, port: int) -> None:
+        # PurePath, not Path: exec_path is only ever stringified (render()),
+        # never touched on disk, so a pure path (e.g. PurePosixPath in tests)
+        # is a valid value regardless of which OS is actually running.
         self.exec_path = exec_path
         self.host = host
         self.port = port
@@ -127,7 +130,7 @@ class Backend(ABC):
 
 
 def detect_backend(
-    exec_path: Path | None = None,
+    exec_path: PurePath | None = None,
     host: str = DEFAULT_BIND,
     port: int = DEFAULT_PORT,
 ) -> Backend:
