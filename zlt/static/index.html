@@ -404,6 +404,7 @@ poll(); loadMode(); schedule();
 <script>
 (function () {
   "use strict";
+  const panel = document.getElementById('ussd-panel');
   const out = document.getElementById('ussd-out');
   const sendForm = document.getElementById('ussd-form');
   const codeInput = document.getElementById('ussd-code');
@@ -412,6 +413,14 @@ poll(); loadMode(); schedule();
   const spinner = document.getElementById('ussd-spinner');
   const savedBox = document.getElementById('ussd-saved');
 
+  let busy = false;
+  function setBusy(state) {
+    panel.querySelectorAll('button').forEach(b => b.disabled = state);
+  }
+
+  /* show() is contracted for the {text, state} shape that send/reply return.
+     The cancel endpoint returns {ok: true} instead, so cancel must never be
+     routed through here - see the dedicated onCancelled() handler below. */
   function show(result) {
     out.hidden = false;
     out.classList.toggle('error', result.state === 'error' || result.state === 'timeout');
@@ -421,7 +430,21 @@ poll(); loadMode(); schedule();
     replyForm.hidden = result.state !== 'prompt';
   }
 
-  async function call(url, payload) {
+  function onCancelled() {
+    out.hidden = false;
+    out.classList.remove('error');
+    out.textContent = 'cancelled';
+    replyForm.hidden = true;
+  }
+
+  /* onResult, when given, replaces the default show() handling of a
+     successful response - used by cancel, whose {ok} payload does not match
+     show()'s {text, state} contract. Failures still go through show(), since
+     {state: 'error', text} always matches that contract. */
+  async function call(url, payload, onResult) {
+    if (busy) return;
+    busy = true;
+    setBusy(true);
     spinner.hidden = false;
     try {
       const r = await fetch(url, {
@@ -430,11 +453,14 @@ poll(); loadMode(); schedule();
         body: payload ? JSON.stringify(payload) : undefined,
       });
       if (!r.ok) { show({ state: 'error', text: 'request failed (' + r.status + ')' }); return; }
-      show(await r.json());
+      const data = await r.json();
+      (onResult || show)(data);
     } catch (e) {
       show({ state: 'error', text: String(e) });
     } finally {
       spinner.hidden = true;
+      setBusy(false);
+      busy = false;
     }
   }
 
@@ -465,8 +491,8 @@ poll(); loadMode(); schedule();
     replyInput.value = '';
   });
   document.getElementById('ussd-cancel').addEventListener('click', () => {
-    call('/api/ussd/cancel', null).then(loadSaved);
     replyForm.hidden = true;
+    call('/api/ussd/cancel', null, onCancelled).then(loadSaved);
   });
 
   loadSaved();
