@@ -208,7 +208,7 @@ def init_config(host: str, username: str, no_service: bool, password: str) -> No
                    "backend, which has no journal of its own.")
 @click.pass_obj
 def serve(client: ZltClient, bind_host: str, port: int, log_file: Path | None) -> None:
-    """Serve the local web dashboard (needs: pip install 'zlt[web]')."""
+    """Serve the local web dashboard."""
     try:
         import uvicorn
 

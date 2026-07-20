@@ -56,30 +56,67 @@ authentication and will quickly show whether the API shape matches.
 
 ## Install
 
-```bash
-./install.sh
-```
-
-This creates a project-local virtualenv at `.venv/`, installs `zlt` into it editable,
-and symlinks `~/.local/bin/zlt` -> `.venv/bin/zlt`.
-
-If `~/.local/bin` isn't already on your `PATH`, `install.sh` will tell you to add:
+Needs [pipx](https://pipx.pypa.io). It puts `zlt` on your PATH in an isolated
+environment, and works the same on Linux, macOS and Windows.
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"   # e.g. in ~/.zshrc or ~/.bashrc
+pipx install zlt
 ```
 
-Then bootstrap your config (prompts for the router admin password, writes
-`~/.config/zlt/config` with `chmod 600`):
+Then bootstrap your config. It prompts for the router admin password, writes
+`~/.config/zlt/config` with `chmod 600`, and offers to run the dashboard
+automatically on login:
 
 ```bash
 zlt init-config                                  # host/username default to
-                                                  #   http://192.168.0.1 / admin
+                                                 #   http://192.168.0.1 / admin
 zlt init-config --host http://192.168.8.1 --username admin
+zlt init-config --no-service                     # skip the autostart offer
 ```
 
 See `.env.example` for the file format if you'd rather write it by hand (or use a
 project-local `.env` during development; never commit real secrets).
+
+### Upgrading from a pre-0.4 install
+
+Earlier versions used `./install.sh`, which built a project-local `.venv` and
+symlinked `~/.local/bin/zlt` at it. pipx will not overwrite a file it does not
+own, so remove the old install first. Skipping this leaves a stale symlink
+shadowing the real entry point on your PATH.
+
+```bash
+systemctl --user disable --now zlt-web          # if you ran ./service.sh
+rm -f ~/.config/systemd/user/zlt-web.service
+systemctl --user daemon-reload
+rm -f ~/.local/bin/zlt
+rm -rf .venv
+pipx install zlt
+```
+
+### Running the dashboard on login
+
+`zlt init-config` offers this, and you can do it any time:
+
+```bash
+zlt service install        # start on login, bound to 0.0.0.0:8464
+zlt service status
+zlt service logs
+zlt service suspend        # stop without uninstalling
+zlt service resume
+zlt service uninstall
+```
+
+The backend is picked for you: a systemd `--user` unit on Linux, a LaunchAgent
+on macOS, a Task Scheduler on-logon task on Windows. Run
+`zlt service print-artifact` to see exactly what would be written.
+
+One difference worth knowing: on Linux a suspended service returns at your next
+login, while on macOS and Windows it stays down until `zlt service resume`.
+
+> The Linux path is tested on real hardware. The macOS and Windows backends have
+> their generated artifacts covered by tests and are exercised in CI, but the
+> `launchctl` and `schtasks` calls themselves are not yet verified on real
+> machines. Reports welcome.
 
 ### Config resolution order
 
@@ -117,7 +154,6 @@ watching signal move live while you reposition the router, and flipping network
 mode with a tap from your phone.
 
 ```bash
-.venv/bin/pip install -e '.[web]'
 zlt serve                      # http://127.0.0.1:8464
 zlt serve --host 0.0.0.0       # reachable from other LAN devices (see note)
 ```
@@ -145,31 +181,9 @@ is one endpoint here plus one panel in `zlt/static/index.html`; the raw
 `client.post()` passthrough already handles CSRF and auth-retry for any
 `goformId` you capture from the stock UI.
 
-### Run it as a service
-
 To keep the dashboard always up (so you can hit it from your phone without leaving
-a terminal open), install it as a **systemd user service**. No root required: it
-runs as you and reads the same `~/.config/zlt/config`.
-
-```bash
-./service.sh install      # write the unit, enable, and start it
-```
-
-It binds `0.0.0.0:8464` so other LAN devices (your phone) can reach it, with the
-same **no-auth, trust-your-LAN** caveat as above. Like any other user service, it
-starts automatically when you log in.
-
-```bash
-./service.sh suspend      # stop it (comes back on 'resume' or next login)
-./service.sh resume       # start it again
-./service.sh status       # is it running?
-./service.sh logs         # follow the journal
-./service.sh uninstall    # remove it for good
-```
-
-`suspend` is temporary: because the service stays enabled, it starts again the next
-time you log in. To keep it off permanently, use `uninstall` (or
-`systemctl --user disable zlt-web`).
+a terminal open), see ["Running the dashboard on login"](#running-the-dashboard-on-login)
+in the Install section above for `zlt service install` and friends.
 
 ## Discovered API reference
 
@@ -308,7 +322,11 @@ suite, which mocks all HTTP):
 
 ## Development
 
+pipx is for using `zlt`. To work on it, use a normal virtualenv:
+
 ```bash
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
 .venv/bin/pytest -v
 ```
 

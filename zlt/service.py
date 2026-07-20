@@ -1,7 +1,8 @@
 """Cross-platform autostart management for the zlt web dashboard.
 
-Replaces the old install.sh/service.sh pair. Bash does not run on Windows, so
-this lives in Python where one implementation can serve all three platforms.
+Replaces the old shell-script installer and service manager. Bash does not run
+on Windows, so this lives in Python where one implementation can serve all
+three platforms.
 
 The module is deliberately split in two. Artifact generation (render() and
 artifact_path()) is pure, so the macOS and Windows artifacts can be asserted on

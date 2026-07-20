@@ -116,7 +116,7 @@ def test_index_serves_dashboard():
 def test_web_deps_are_not_optional():
     """The dashboard is the point of the service, so it must not need an extra.
 
-    'pipx install zlt[web]' cannot be typed portably: single quotes are not
+    A quoted extras install cannot be typed portably: single quotes are not
     quote characters in Windows cmd.exe. Keep these as regular dependencies.
     """
     import tomllib
