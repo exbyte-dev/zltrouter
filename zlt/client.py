@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import requests
@@ -28,6 +29,36 @@ class LockedOut(ZltError):
 
 class RouterError(ZltError):
     """The router returned an error result for a POST."""
+
+
+class UssdError(ZltError):
+    """The router returned an unparseable USSD reply."""
+
+
+@dataclass
+class UssdResult:
+    text: str
+    state: str  # complete | prompt | error | timeout  (pending is internal only)
+
+
+# --- USSD (assumed ZTE reqproc contract; verify live, see plan) ---------------
+USSD_SEND_GOFORM = "USSD_PROCESS"
+USSD_OPERATOR_FIELD = "USSD_operator"
+USSD_SEND_FIELD = "USSD_send_number"
+USSD_REPLY_FIELD = "USSD_reply_number"
+USSD_OP_SEND = "ussd_send"
+USSD_OP_REPLY = "ussd_reply"
+USSD_OP_CANCEL = "ussd_cancel"
+USSD_FLAG_KEY = "ussd_write_flag"
+USSD_DATA_KEY = "ussd_data_info"
+USSD_READ_KEYS = [USSD_FLAG_KEY, USSD_DATA_KEY]
+USSD_FLAG_PENDING = "0"
+USSD_FLAG_RECEIVED = "1"
+USSD_FLAG_TIMEOUT = "2"
+USSD_FLAG_ERROR = "3"
+USSD_ACTION_PROMPT = "1"  # ussd_action value meaning "network wants a reply"
+USSD_TIMEOUT = 20.0
+USSD_POLL_INTERVAL = 1.0
 
 
 BEARER_MAP: dict[str, str] = {
@@ -191,6 +222,52 @@ class ZltClient:
             self.login()
             return self._post_with_retry(goform_id, fields, retried=True)
         return data
+
+    # --- USSD -----------------------------------------------------------------
+    def ussd_send(self, code, *, timeout=USSD_TIMEOUT, interval=USSD_POLL_INTERVAL):
+        self.post(USSD_SEND_GOFORM, **{
+            USSD_OPERATOR_FIELD: USSD_OP_SEND,
+            USSD_SEND_FIELD: code,
+        })
+        return self._ussd_poll(timeout, interval)
+
+    def ussd_reply(self, text, *, timeout=USSD_TIMEOUT, interval=USSD_POLL_INTERVAL):
+        self.post(USSD_SEND_GOFORM, **{
+            USSD_OPERATOR_FIELD: USSD_OP_REPLY,
+            USSD_REPLY_FIELD: text,
+        })
+        return self._ussd_poll(timeout, interval)
+
+    def ussd_cancel(self):
+        self.post(USSD_SEND_GOFORM, **{USSD_OPERATOR_FIELD: USSD_OP_CANCEL})
+
+    def _ussd_poll(self, timeout, interval):
+        deadline = time.monotonic() + timeout
+        while True:
+            result = self._parse_ussd(self.get(*USSD_READ_KEYS))
+            if result.state != "pending":
+                return result
+            if time.monotonic() >= deadline:
+                return UssdResult("", "timeout")
+            time.sleep(interval)
+
+    def _parse_ussd(self, raw):
+        flag = str(raw.get(USSD_FLAG_KEY, "")).strip()
+        info = raw.get(USSD_DATA_KEY, "")
+        if isinstance(info, dict):
+            text = str(info.get("ussd_data", ""))
+            action = str(info.get("ussd_action", "")).strip()
+        else:
+            text = str(info)
+            action = ""
+        if flag == USSD_FLAG_TIMEOUT:
+            return UssdResult("", "timeout")
+        if flag == USSD_FLAG_ERROR:
+            return UssdResult(text, "error")
+        if flag == USSD_FLAG_RECEIVED and (text or action):
+            state = "prompt" if action == USSD_ACTION_PROMPT else "complete"
+            return UssdResult(text, state)
+        return UssdResult("", "pending")
 
     # --- session persistence ---------------------------------------------------
     def _save_session(self) -> None:

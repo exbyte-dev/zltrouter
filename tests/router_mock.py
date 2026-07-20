@@ -37,3 +37,27 @@ def install_post(result: str = "success", headers: dict | None = None,
     if extra:
         body.update(extra)
     responses.add(responses.POST, PROC_POST, json=body, headers=headers or {})
+
+
+def install_ussd(polls, *, post_result="success", token="1"):
+    """Simulate a USSD handshake over proc_get/proc_post.
+
+    `polls` is a list of proc_get bodies handed out on successive USSD polls
+    (the last entry repeats once exhausted). get_token/get_random_login are
+    answered so the client counts as logged in; a poll is any other cmd.
+    proc_post always returns {'result': post_result}.
+    """
+    state = {"i": 0}
+
+    def get_cb(request):
+        cmd = parse_qs(urlparse(request.url).query).get("cmd", [""])[0]
+        if cmd == "get_token":
+            return (200, {}, json.dumps({"token": token}))
+        if cmd == "get_random_login":
+            return (200, {}, json.dumps({"random_login": "12345678"}))
+        i = min(state["i"], len(polls) - 1)
+        state["i"] += 1
+        return (200, {}, json.dumps(polls[i]))
+
+    responses.add_callback(responses.GET, PROC_GET, callback=get_cb)
+    responses.add(responses.POST, PROC_POST, json={"result": post_result})
