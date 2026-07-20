@@ -155,3 +155,28 @@ def test_launchd_suspend_note_says_it_stays_down(tmp_path, monkeypatch):
     note = _launchd(tmp_path, monkeypatch).suspend_note
     assert "resume" in note
     assert "login" not in note
+
+
+def test_launchd_suspend_is_tolerant_of_already_stopped(tmp_path, monkeypatch):
+    # bootout errors if the target isn't loaded; calling suspend() twice in a
+    # row (or when already stopped) must not raise.
+    calls = []
+    monkeypatch.setattr(service, "_run", lambda cmd, **kw: calls.append((cmd, kw)))
+    monkeypatch.setattr(service.os, "getuid", lambda: 501, raising=False)
+    backend = _launchd(tmp_path, monkeypatch)
+    backend.suspend()
+    assert calls == [
+        (["launchctl", "bootout", "gui/501/dev.zlt.web"], {"check": False})]
+
+
+def test_launchd_resume_is_tolerant_of_already_running(tmp_path, monkeypatch):
+    # bootstrap errors if the label is already loaded; calling resume() right
+    # after install(), or twice in a row, must not raise.
+    calls = []
+    monkeypatch.setattr(service, "_run", lambda cmd, **kw: calls.append((cmd, kw)))
+    monkeypatch.setattr(service.os, "getuid", lambda: 501, raising=False)
+    backend = _launchd(tmp_path, monkeypatch)
+    backend.resume()
+    assert calls == [
+        (["launchctl", "bootstrap", "gui/501", str(backend.artifact_path())],
+         {"check": False})]

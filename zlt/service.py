@@ -241,10 +241,13 @@ class LaunchdBackend(Backend):
         self.artifact_path().unlink(missing_ok=True)
 
     def suspend(self) -> None:
-        _run(["launchctl", "bootout", self._target()])
+        # Tolerate an already-stopped agent so suspend is repeatable.
+        _run(["launchctl", "bootout", self._target()], check=False)
 
     def resume(self) -> None:
-        _run(["launchctl", "bootstrap", self._domain(), str(self.artifact_path())])
+        # Tolerate an already-running agent so resume is repeatable.
+        _run(["launchctl", "bootstrap", self._domain(), str(self.artifact_path())],
+             check=False)
 
     def status(self) -> None:
         _run(["launchctl", "print", self._target()], check=False)
