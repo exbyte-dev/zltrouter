@@ -18,6 +18,8 @@ import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+from zlt.config import config_home
+
 SERVICE_NAME = "zlt-web"
 LAUNCHD_LABEL = "dev.zlt.web"
 DESCRIPTION = "zlt router dashboard (local web UI)"
@@ -140,16 +142,53 @@ def detect_backend(
 
 
 class SystemdBackend(Backend):
-    def artifact_path(self) -> Path: raise NotImplementedError
-    def render(self) -> str: raise NotImplementedError
+    """Linux. systemd --user unit, started on login, no lingering."""
+
+    def artifact_path(self) -> Path:
+        return config_home() / "systemd" / "user" / f"{SERVICE_NAME}.service"
+
+    def render(self) -> str:
+        # %h is a systemd specifier and must stay literal in the output.
+        return (
+            "[Unit]\n"
+            f"Description={DESCRIPTION}\n"
+            "\n"
+            "[Service]\n"
+            f"ExecStart={self.exec_path} serve --host {self.host} --port {self.port}\n"
+            "WorkingDirectory=%h\n"
+            "Restart=on-failure\n"
+            "RestartSec=5\n"
+            "NoNewPrivileges=yes\n"
+            "\n"
+            "[Install]\n"
+            "WantedBy=default.target\n"
+        )
+
     @property
-    def suspend_note(self) -> str: raise NotImplementedError
-    def install(self) -> None: raise NotImplementedError
-    def uninstall(self) -> None: raise NotImplementedError
-    def suspend(self) -> None: raise NotImplementedError
-    def resume(self) -> None: raise NotImplementedError
-    def status(self) -> None: raise NotImplementedError
-    def logs(self) -> None: raise NotImplementedError
+    def suspend_note(self) -> str:
+        return "stopped; it comes back on 'resume' or at your next login"
+
+    def install(self) -> None:
+        self._write_artifact()
+        _run(["systemctl", "--user", "daemon-reload"])
+        _run(["systemctl", "--user", "enable", "--now", SERVICE_NAME])
+
+    def uninstall(self) -> None:
+        _run(["systemctl", "--user", "disable", "--now", SERVICE_NAME], check=False)
+        self.artifact_path().unlink(missing_ok=True)
+        _run(["systemctl", "--user", "daemon-reload"], check=False)
+
+    def suspend(self) -> None:
+        _run(["systemctl", "--user", "stop", SERVICE_NAME])
+
+    def resume(self) -> None:
+        _run(["systemctl", "--user", "start", SERVICE_NAME])
+
+    def status(self) -> None:
+        _run(["systemctl", "--user", "status", SERVICE_NAME, "--no-pager"], check=False)
+
+    def logs(self) -> None:
+        _run(["journalctl", "--user", "-u", SERVICE_NAME, "-f"], check=False)
 
 
 class LaunchdBackend(SystemdBackend):

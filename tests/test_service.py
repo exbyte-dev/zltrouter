@@ -54,3 +54,59 @@ def test_run_raises_service_error_on_missing_command(monkeypatch):
     monkeypatch.setattr(subprocess, "run", boom)
     with pytest.raises(service.ServiceError):
         service._run(["definitely-not-a-real-command"])
+
+
+import configparser
+
+
+def _parse_unit(text: str) -> configparser.ConfigParser:
+    # interpolation=None: WorkingDirectory=%h would break BasicInterpolation.
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.optionxform = str  # preserve ExecStart, not execstart
+    parser.read_string(text)
+    return parser
+
+
+def _systemd(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    return service.SystemdBackend(Path("/opt/pipx/bin/zlt"), "0.0.0.0", 8464)
+
+
+def test_systemd_unit_is_valid_and_autostarts(tmp_path, monkeypatch):
+    parser = _parse_unit(_systemd(tmp_path, monkeypatch).render())
+    assert parser["Service"]["ExecStart"] == (
+        "/opt/pipx/bin/zlt serve --host 0.0.0.0 --port 8464")
+    assert parser["Service"]["Restart"] == "on-failure"
+    assert parser["Service"]["RestartSec"] == "5"
+    assert parser["Service"]["WorkingDirectory"] == "%h"
+    assert parser["Service"]["NoNewPrivileges"] == "yes"
+    assert parser["Install"]["WantedBy"] == "default.target"
+
+
+def test_systemd_artifact_path_follows_xdg(tmp_path, monkeypatch):
+    backend = _systemd(tmp_path, monkeypatch)
+    assert backend.artifact_path() == tmp_path / "systemd" / "user" / "zlt-web.service"
+
+
+def test_systemd_install_writes_unit_and_enables(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(service, "_run", lambda cmd, **kw: calls.append(cmd))
+    backend = _systemd(tmp_path, monkeypatch)
+    backend.install()
+    assert backend.artifact_path().exists()
+    assert ["systemctl", "--user", "daemon-reload"] in calls
+    assert ["systemctl", "--user", "enable", "--now", "zlt-web"] in calls
+
+
+def test_systemd_uninstall_removes_unit(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(service, "_run", lambda cmd, **kw: calls.append(cmd))
+    backend = _systemd(tmp_path, monkeypatch)
+    backend.install()
+    backend.uninstall()
+    assert not backend.artifact_path().exists()
+    assert ["systemctl", "--user", "disable", "--now", "zlt-web"] in calls
+
+
+def test_systemd_suspend_note_mentions_next_login(tmp_path, monkeypatch):
+    assert "login" in _systemd(tmp_path, monkeypatch).suspend_note
