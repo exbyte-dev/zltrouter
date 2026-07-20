@@ -58,6 +58,18 @@ def test_send_prompt_empty_input_cancels(monkeypatch):
     assert "cancelled" in r.output.lower()
 
 
+def test_send_prompt_eof_cancels(monkeypatch):
+    # Empty input stream: click.prompt hits EOF while reading the reply line
+    # (distinct from test_send_prompt_empty_input_cancels, which supplies a
+    # real newline that click.prompt resolves to the default "" value).
+    monkeypatch.setattr("zlt.cli._stdin_is_tty", lambda: True)
+    client = FakeClient([UssdResult("1 Data 2 Voice", "prompt")])
+    r = CliRunner().invoke(cli, ["ussd", "send", "*312#"], obj=client, input="")
+    assert r.exit_code == 0
+    assert client.cancelled is True
+    assert "cancelled" in r.output.lower()
+
+
 def test_send_prompt_nontty_prints_menu_and_exits():
     # No TTY (CliRunner default): print the menu, do not hang waiting for input.
     client = FakeClient([UssdResult("1 Data 2 Voice", "prompt")])
