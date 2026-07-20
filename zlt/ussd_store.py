@@ -20,8 +20,13 @@ def load_codes() -> list[dict]:
 
 def save_code(label: str, code: str) -> None:
     label, code = label.strip(), code.strip()
-    codes = [c for c in load_codes() if c["label"].lower() != label.lower()]
-    codes.append({"label": label, "code": code})
+    codes = load_codes()
+    for c in codes:
+        if c["label"].lower() == label.lower():
+            c["label"], c["code"] = label, code
+            break
+    else:
+        codes.append({"label": label, "code": code})
     _write(codes)
 
 

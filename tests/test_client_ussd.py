@@ -1,7 +1,8 @@
+import pytest
 import responses
 
 from tests.router_mock import install_ussd
-from zlt.client import UssdResult, ZltClient
+from zlt.client import UssdError, UssdResult, ZltClient
 from zlt.config import Config
 
 
@@ -41,6 +42,12 @@ def test_parse_error_and_timeout_flags():
     c = ZltClient.__new__(ZltClient)
     assert c._parse_ussd({"ussd_write_flag": "3", "ussd_data_info": "bad"}).state == "error"
     assert c._parse_ussd({"ussd_write_flag": "2", "ussd_data_info": ""}).state == "timeout"
+
+
+def test_parse_missing_flag_key_raises():
+    c = ZltClient.__new__(ZltClient)
+    with pytest.raises(UssdError):
+        c._parse_ussd({"ussd_data_info": "x"})
 
 
 @responses.activate
@@ -88,3 +95,22 @@ def test_ussd_cancel_posts_cancel(tmp_path):
     _client(tmp_path).ussd_cancel()
     post = [c for c in responses.calls if c.request.method == "POST"][0]
     assert "USSD_operator=ussd_cancel" in post.request.body
+
+
+@responses.activate
+def test_ussd_send_raises_on_contract_mismatch(tmp_path):
+    install_ussd([{"ussd_data_info": "x"}])
+    with pytest.raises(UssdError):
+        _client(tmp_path).ussd_send("*310#", interval=0)
+
+
+@responses.activate
+def test_ussd_reply_posts_expected_body(tmp_path):
+    install_ussd([{"ussd_write_flag": "1", "ussd_data_info": "ok"}])
+    client = _client(tmp_path)
+    client.ussd_send("*310#", interval=0)
+    client.ussd_reply("1", interval=0)
+    posts = [c for c in responses.calls if c.request.method == "POST"]
+    second = posts[1]
+    assert "USSD_operator=ussd_reply" in second.request.body
+    assert "USSD_reply_number=1" in second.request.body

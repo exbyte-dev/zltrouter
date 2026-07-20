@@ -25,6 +25,17 @@ def test_save_upserts_by_case_insensitive_label(monkeypatch, tmp_path):
     assert ussd_store.load_codes() == [{"label": "balance", "code": "*311#"}]
 
 
+def test_save_upsert_preserves_order(monkeypatch, tmp_path):
+    _use_tmp(monkeypatch, tmp_path)
+    ussd_store.save_code("A", "x")
+    ussd_store.save_code("B", "y")
+    ussd_store.save_code("a", "z")
+    assert ussd_store.load_codes() == [
+        {"label": "a", "code": "z"},
+        {"label": "B", "code": "y"},
+    ]
+
+
 def test_remove_returns_whether_removed(monkeypatch, tmp_path):
     _use_tmp(monkeypatch, tmp_path)
     ussd_store.save_code("Balance", "*310#")

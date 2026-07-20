@@ -17,6 +17,7 @@ from zlt.client import (
     LoginError,
     RouterError,
     RouterUnreachable,
+    UssdError,
     UssdResult,
     ZltClient,
 )
@@ -151,7 +152,7 @@ def _ussd_flow(client: ZltClient, code: str) -> None:
                 click.echo("cancelled")
                 return
             result = client.ussd_reply(reply.strip())
-    except (LoginError, LockedOut, RouterUnreachable) as exc:
+    except (LoginError, LockedOut, RouterUnreachable, UssdError) as exc:
         raise click.ClickException(str(exc))
 
 
@@ -174,7 +175,7 @@ def ussd_cancel_cmd(client: ZltClient) -> None:
     """Cancel the active USSD session."""
     try:
         client.ussd_cancel()
-    except (LoginError, LockedOut, RouterUnreachable) as exc:
+    except (LoginError, LockedOut, RouterUnreachable, UssdError) as exc:
         raise click.ClickException(str(exc))
     click.echo("cancelled")
 

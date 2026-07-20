@@ -1,7 +1,7 @@
 from click.testing import CliRunner
 
 from zlt.cli import cli
-from zlt.client import UssdResult
+from zlt.client import UssdError, UssdResult
 
 
 class FakeClient:
@@ -119,3 +119,19 @@ def test_cancel_command():
     r = CliRunner().invoke(cli, ["ussd", "cancel"], obj=client)
     assert r.exit_code == 0
     assert client.cancelled is True
+
+
+class MismatchClient:
+    def __init__(self, config=None):
+        self.config = config
+
+    def ussd_send(self, code, **kw):
+        raise UssdError("device mismatch")
+
+
+def test_send_contract_mismatch_exits_cleanly():
+    client = MismatchClient()
+    r = CliRunner().invoke(cli, ["ussd", "send", "*310#"], obj=client)
+    assert r.exit_code != 0
+    assert "device mismatch" in r.output
+    assert "Traceback" not in r.output

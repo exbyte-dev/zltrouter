@@ -53,6 +53,14 @@ def test_reply_passes_text():
     r = make(client).post("/api/ussd/reply", json={"text": "1"})
     assert r.status_code == 200
     assert client.replies == ["1"]
+    assert r.json() == {"text": "You chose Data", "state": "complete"}
+
+
+def test_reply_rejects_empty():
+    client = UssdStub([])
+    r = make(client).post("/api/ussd/reply", json={"text": "  "})
+    assert r.status_code == 422
+    assert client.replies == []
 
 
 def test_cancel_calls_client():

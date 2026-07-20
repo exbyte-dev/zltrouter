@@ -487,7 +487,9 @@ poll(); loadMode(); schedule();
   });
   replyForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    call('/api/ussd/reply', { text: replyInput.value });
+    const text = replyInput.value.trim();
+    if (!text) return;
+    call('/api/ussd/reply', { text });
     replyInput.value = '';
   });
   document.getElementById('ussd-cancel').addEventListener('click', () => {

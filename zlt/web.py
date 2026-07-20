@@ -168,9 +168,13 @@ def create_app(client: ZltClient) -> FastAPI:
 
     @app.post("/api/ussd/reply")
     def ussd_reply(body: UssdReplyBody) -> dict:
+        text = body.text.strip()
+        if not text:
+            raise HTTPException(status_code=422, detail="empty USSD reply")
+
         def work():
             with lock:
-                return client.ussd_reply(body.text.strip())
+                return client.ussd_reply(text)
 
         result = _guard(work)
         return {"text": result.text, "state": result.state}

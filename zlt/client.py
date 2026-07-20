@@ -224,24 +224,28 @@ class ZltClient:
         return data
 
     # --- USSD -----------------------------------------------------------------
-    def ussd_send(self, code, *, timeout=USSD_TIMEOUT, interval=USSD_POLL_INTERVAL):
+    def ussd_send(
+        self, code: str, *, timeout: float = USSD_TIMEOUT, interval: float = USSD_POLL_INTERVAL
+    ) -> UssdResult:
         self.post(USSD_SEND_GOFORM, **{
             USSD_OPERATOR_FIELD: USSD_OP_SEND,
             USSD_SEND_FIELD: code,
         })
         return self._ussd_poll(timeout, interval)
 
-    def ussd_reply(self, text, *, timeout=USSD_TIMEOUT, interval=USSD_POLL_INTERVAL):
+    def ussd_reply(
+        self, text: str, *, timeout: float = USSD_TIMEOUT, interval: float = USSD_POLL_INTERVAL
+    ) -> UssdResult:
         self.post(USSD_SEND_GOFORM, **{
             USSD_OPERATOR_FIELD: USSD_OP_REPLY,
             USSD_REPLY_FIELD: text,
         })
         return self._ussd_poll(timeout, interval)
 
-    def ussd_cancel(self):
+    def ussd_cancel(self) -> None:
         self.post(USSD_SEND_GOFORM, **{USSD_OPERATOR_FIELD: USSD_OP_CANCEL})
 
-    def _ussd_poll(self, timeout, interval):
+    def _ussd_poll(self, timeout: float, interval: float) -> UssdResult:
         deadline = time.monotonic() + timeout
         while True:
             result = self._parse_ussd(self.get(*USSD_READ_KEYS))
@@ -251,7 +255,12 @@ class ZltClient:
                 return UssdResult("", "timeout")
             time.sleep(interval)
 
-    def _parse_ussd(self, raw):
+    def _parse_ussd(self, raw: dict) -> UssdResult:
+        if USSD_FLAG_KEY not in raw:
+            raise UssdError(
+                f"unexpected USSD poll response (no '{USSD_FLAG_KEY}' key); "
+                f"the device may use a different USSD API: {raw}"
+            )
         flag = str(raw.get(USSD_FLAG_KEY, "")).strip()
         info = raw.get(USSD_DATA_KEY, "")
         if isinstance(info, dict):
