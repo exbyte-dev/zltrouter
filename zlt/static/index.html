@@ -107,6 +107,7 @@
   .row .k{color:var(--muted); font-size:14px}
   .row .v{font-family:var(--nums); font-size:14px}
   .row .v:empty::after{content:"—"; color:var(--faint)}
+  #bigVal:empty::after{content:"···"; color:var(--faint)}
 
   .ussd-saved-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px}
   #ussd-saved:empty{display:none}
@@ -117,20 +118,39 @@
   }
   .ussd-link:hover{color:var(--ink)}
   .ussd-link:disabled{opacity:.45; cursor:wait}
-  .ussd-chip{
-    display:inline-flex; align-items:center;
-    background:var(--surface); border:1px solid var(--line); border-radius:999px;
-    padding:0 4px 0 14px; font-size:14px; color:var(--muted);
+  .ussd-manage-card{
+    background:var(--surface); border:1px solid var(--line); border-radius:10px;
+    padding:14px 16px; margin-bottom:14px;
   }
-  .ussd-chip .lbl{padding:8px 0}
+  .ussd-manage-label{
+    font-size:12px; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--faint); font-weight:500; margin-bottom:12px;
+  }
+  .ussd-manage-list:empty{display:none}
+  .ussd-manage-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:11px 0; border-bottom:1px solid var(--line-soft);
+  }
+  .ussd-manage-row:last-child{border-bottom:none}
+  .ussd-manage-row .ussd-manage-meta{
+    display:flex; align-items:baseline; gap:8px; min-width:0; overflow:hidden;
+  }
+  .ussd-manage-row .lbl{
+    font-size:14px; color:var(--ink);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .ussd-manage-row .code{
+    font-family:var(--nums); font-size:12px; color:var(--faint); flex-shrink:0;
+  }
   .ussd-x{
-    font:inherit; font-size:16px; line-height:1; cursor:pointer;
+    font:inherit; font-size:17px; line-height:1; cursor:pointer;
     background:none; border:none; color:var(--faint);
-    padding:5px 8px; margin-left:2px; border-radius:50%; transition:color .15s;
+    padding:8px 10px; border-radius:6px; transition:color .15s, background-color .15s;
   }
-  .ussd-x:hover{color:var(--poor)}
+  .ussd-x:hover{color:var(--poor); background:var(--line-soft)}
   .ussd-x:disabled{opacity:.45; cursor:wait}
   .ussd-row{display:flex; gap:8px; margin-bottom:10px}
+  .ussd-row[hidden]{display:none}
   .ussd-input{
     flex:1; min-width:0; font:inherit; font-size:14px; padding:8px 14px;
     background:var(--surface); color:var(--ink);
@@ -185,8 +205,8 @@
 
   <div class="hero">
     <div class="label" id="bigLabel">RSRP</div>
-    <div class="big"><span id="bigVal">—</span><small>dBm</small></div>
-    <div class="quality" id="qualityWord">&nbsp;</div>
+    <div class="big"><span id="bigVal"></span><small>dBm</small></div>
+    <div class="quality" id="qualityWord">loading&hellip;</div>
   </div>
 
   <div class="bar" aria-hidden="true"><i id="fill"></i></div>
@@ -222,12 +242,16 @@
       <div class="seg" id="ussd-saved"></div>
       <button type="button" id="ussd-manage" class="ussd-link">Manage</button>
     </div>
-    <form id="ussd-save-form" class="ussd-row" hidden>
-      <input id="ussd-save-label" class="ussd-input" placeholder="Label" autocomplete="off">
-      <input id="ussd-save-code" class="ussd-input" placeholder="*310#" autocomplete="off">
-      <button type="submit" class="ussd-btn">Add</button>
-    </form>
-    <div id="ussd-manage-msg" class="modehint" hidden></div>
+    <div id="ussd-manage-card" class="ussd-manage-card" hidden>
+      <div class="ussd-manage-label">Manage saved codes</div>
+      <div id="ussd-manage-list" class="ussd-manage-list"></div>
+      <form id="ussd-save-form" class="ussd-row">
+        <input id="ussd-save-label" class="ussd-input" placeholder="Label" autocomplete="off">
+        <input id="ussd-save-code" class="ussd-input" placeholder="*310#" autocomplete="off">
+        <button type="submit" class="ussd-btn">Add</button>
+      </form>
+      <div id="ussd-manage-msg" class="modehint" hidden></div>
+    </div>
     <form id="ussd-form" class="ussd-row">
       <input id="ussd-code" class="ussd-input" placeholder="*310#" autocomplete="off">
       <button type="submit" class="ussd-btn">Send</button>
@@ -330,13 +354,19 @@ function drawReadings(d){
 }
 
 /* --- status polling ------------------------------------------------------- */
-let timer = null, paused = false;
+let timer = null, paused = false, pollBusy = false;
+let pollFails = 0, everLoaded = false;
+const POLL_FAIL_THRESHOLD = 2;
 async function poll(){
+  if (pollBusy) return;
+  pollBusy = true;
   try {
     const r = await fetch('/api/status');
     if (!r.ok) throw new Error((await r.json().catch(()=>({}))).detail || `HTTP ${r.status}`);
     const s = await r.json();
     $('banner').classList.remove('show');
+    pollFails = 0;
+    everLoaded = true;
     $('host').textContent = s.host.replace(/^https?:\/\//,'');
     $('dot').className = 'dot ' + (s.authed ? 'on' : 'off');
     $('sessionWord').textContent = s.authed ? 'logged in' : 'open data';
@@ -369,8 +399,17 @@ async function poll(){
     drawReadings(d);
     $('stamp').textContent = 'updated ' + new Date().toLocaleTimeString();
   } catch (e) {
-    $('banner').textContent = 'status: ' + e.message;
-    $('banner').classList.add('show');
+    pollFails++;
+    if (pollFails >= POLL_FAIL_THRESHOLD) {
+      if (everLoaded) {
+        $('banner').textContent = 'status: ' + e.message;
+        $('banner').classList.add('show');
+      } else {
+        $('qualityWord').textContent = 'connection issue';
+      }
+    }
+  } finally {
+    pollBusy = false;
   }
 }
 function schedule(){
@@ -427,6 +466,7 @@ segButtons().forEach(btn => {
   });
 });
 
+drawReadings({});
 poll(); loadMode(); schedule();
 </script>
 
@@ -442,6 +482,8 @@ poll(); loadMode(); schedule();
   const spinner = document.getElementById('ussd-spinner');
   const savedBox = document.getElementById('ussd-saved');
   const manageBtn = document.getElementById('ussd-manage');
+  const manageCard = document.getElementById('ussd-manage-card');
+  const manageList = document.getElementById('ussd-manage-list');
   const saveForm = document.getElementById('ussd-save-form');
   const saveLabel = document.getElementById('ussd-save-label');
   const saveCode = document.getElementById('ussd-save-code');
@@ -511,30 +553,38 @@ poll(); loadMode(); schedule();
 
   function renderSaved() {
     savedBox.innerHTML = '';
-    for (const c of saved) {
-      if (!managing) {
+    manageList.innerHTML = '';
+    if (!managing) {
+      for (const c of saved) {
         const b = document.createElement('button');
         b.type = 'button';
         b.textContent = c.label;
         b.title = c.code;
         b.onclick = () => call('/api/ussd/send', { code: c.code });
         savedBox.appendChild(b);
-        continue;
       }
-      const chip = document.createElement('span');
-      chip.className = 'ussd-chip';
+      return;
+    }
+    for (const c of saved) {
+      const row = document.createElement('div');
+      row.className = 'ussd-manage-row';
+      const meta = document.createElement('span');
+      meta.className = 'ussd-manage-meta';
       const lbl = document.createElement('span');
       lbl.className = 'lbl';
       lbl.textContent = c.label;
-      chip.title = c.code;
+      const code = document.createElement('span');
+      code.className = 'code';
+      code.textContent = c.code;
+      meta.append(lbl, code);
       const x = document.createElement('button');
       x.type = 'button';
       x.className = 'ussd-x';
       x.textContent = '×';
       x.setAttribute('aria-label', 'Remove ' + c.label);
       x.onclick = () => store('DELETE', { label: c.label });
-      chip.append(lbl, x);
-      savedBox.appendChild(chip);
+      row.append(meta, x);
+      manageList.appendChild(row);
     }
   }
 
@@ -597,7 +647,7 @@ poll(); loadMode(); schedule();
   manageBtn.addEventListener('click', () => {
     managing = !managing;
     manageBtn.textContent = managing ? 'Done' : 'Manage';
-    saveForm.hidden = !managing;
+    manageCard.hidden = !managing;
     note('');
     if (managing && !saveCode.value) saveCode.value = codeInput.value.trim();
     renderSaved();
