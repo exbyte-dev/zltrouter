@@ -48,3 +48,20 @@ def test_net_set_accepts_every_alias_the_extension_offers():
     help_text = CliRunner().invoke(cli, ["net", "set", "--help"]).output
     for alias in aliases:
         assert alias in help_text, f"{alias} missing from 'zlt net set' choices"
+
+
+def test_reported_version_matches_pyproject():
+    """`zlt --version` must not under-report the installed version.
+
+    These drifted once already: releases 0.4.0 and 0.4.1 bumped pyproject.toml
+    but not zlt/__init__.py, so the CLI kept claiming 0.3.0. Bump both.
+    """
+    import tomllib
+    from pathlib import Path
+
+    from zlt import __version__
+
+    root = Path(__file__).resolve().parents[1]
+    packaged = tomllib.loads((root / "pyproject.toml").read_text())["project"]["version"]
+    assert __version__ == packaged
+    assert packaged in CliRunner().invoke(cli, ["--version"]).output
