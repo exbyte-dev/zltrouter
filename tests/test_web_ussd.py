@@ -77,3 +77,48 @@ def test_codes_reads_store(monkeypatch, tmp_path):
     r = make(UssdStub([])).get("/api/ussd/codes")
     assert r.status_code == 200
     assert r.json() == {"codes": [{"label": "Balance", "code": "*310#"}]}
+
+
+def test_save_code_adds_and_returns_updated_list(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    r = make(UssdStub([])).post(
+        "/api/ussd/codes", json={"label": "Balance", "code": "*310#"}
+    )
+    assert r.status_code == 200
+    assert r.json() == {"codes": [{"label": "Balance", "code": "*310#"}]}
+
+
+def test_save_code_upserts_in_place(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    client = make(UssdStub([]))
+    client.post("/api/ussd/codes", json={"label": "A", "code": "*1#"})
+    client.post("/api/ussd/codes", json={"label": "B", "code": "*2#"})
+    r = client.post("/api/ussd/codes", json={"label": "a", "code": "*9#"})
+    assert r.json() == {
+        "codes": [{"label": "a", "code": "*9#"}, {"label": "B", "code": "*2#"}]
+    }
+
+
+def test_save_code_rejects_blank_label_or_code(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    client = make(UssdStub([]))
+    assert client.post("/api/ussd/codes", json={"label": " ", "code": "*310#"}).status_code == 422
+    assert client.post("/api/ussd/codes", json={"label": "X", "code": " "}).status_code == 422
+    assert client.get("/api/ussd/codes").json() == {"codes": []}
+
+
+def test_delete_code_removes_and_returns_updated_list(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    client = make(UssdStub([]))
+    client.post("/api/ussd/codes", json={"label": "Balance", "code": "*310#"})
+    r = client.request("DELETE", "/api/ussd/codes", json={"label": "balance"})
+    assert r.status_code == 200
+    assert r.json() == {"codes": []}
+
+
+def test_delete_unknown_code_is_404(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    r = make(UssdStub([])).request(
+        "DELETE", "/api/ussd/codes", json={"label": "nope"}
+    )
+    assert r.status_code == 404

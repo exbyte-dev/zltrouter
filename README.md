@@ -165,7 +165,11 @@ zlt serve --host 0.0.0.0       # reachable from other LAN devices (see note)
 - **Network mode switching:** the same `SET_BEARER_PREFERENCE` write as
   `zlt net set`, verified and re-read after each change.
 - **USSD codes:** send a code and see the reply inline; interactive menus can be
-  replied to and cancelled; saved codes appear as one-click buttons.
+  replied to and cancelled; saved codes appear as one-click buttons. "Manage"
+  turns that row into an editor for adding and removing codes, so the default
+  view stays a clean set of send buttons. The list is the same
+  `~/.config/zlt/ussd.json` the CLI uses, so codes saved either way show up in
+  both.
 - **Light / dark:** follows your system theme by default; the toggle in the header
   overrides it and the choice sticks.
 - Single self-contained HTML page, zero CDN dependencies: it works when the
@@ -179,6 +183,8 @@ status and change router settings, so only do that on a network you trust.
 
 API surface (all JSON): `GET /api/status`, `GET /api/net`,
 `POST /api/net {"mode": "lte"}`, `GET /api/ussd/codes`,
+`POST /api/ussd/codes {"label": "Balance", "code": "*310#"}`,
+`DELETE /api/ussd/codes {"label": "Balance"}`,
 `POST /api/ussd/send {"code": "*310#"}`, `POST /api/ussd/reply {"text": "1"}`,
 `POST /api/ussd/cancel`. USSD is the worked example of this pattern: adding
 another write feature (SMS, etc.) is one endpoint here plus one panel in

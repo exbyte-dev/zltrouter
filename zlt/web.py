@@ -45,6 +45,15 @@ class UssdReplyBody(BaseModel):
     text: str
 
 
+class UssdCodeBody(BaseModel):
+    label: str
+    code: str
+
+
+class UssdCodeLabel(BaseModel):
+    label: str
+
+
 def _resolve_configured(data: dict) -> str:
     return (
         data.get("net_select")
@@ -151,6 +160,26 @@ def create_app(client: ZltClient) -> FastAPI:
 
     @app.get("/api/ussd/codes")
     def ussd_codes() -> dict:
+        return {"codes": ussd_store.load_codes()}
+
+    # The saved-code endpoints touch only the on-disk store, never the router,
+    # so they need neither the lock nor _guard.
+    @app.post("/api/ussd/codes")
+    def ussd_code_save(body: UssdCodeBody) -> dict:
+        label, code = body.label.strip(), body.code.strip()
+        if not label or not code:
+            raise HTTPException(
+                status_code=422, detail="both a label and a code are required"
+            )
+        ussd_store.save_code(label, code)
+        return {"codes": ussd_store.load_codes()}
+
+    @app.delete("/api/ussd/codes")
+    def ussd_code_remove(body: UssdCodeLabel) -> dict:
+        if not ussd_store.remove_code(body.label):
+            raise HTTPException(
+                status_code=404, detail=f"no saved code labelled '{body.label}'"
+            )
         return {"codes": ussd_store.load_codes()}
 
     @app.post("/api/ussd/send")

@@ -108,8 +108,28 @@
   .row .v{font-family:var(--nums); font-size:14px}
   .row .v:empty::after{content:"—"; color:var(--faint)}
 
-  #ussd-saved{margin-bottom:12px}
+  .ussd-saved-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px}
   #ussd-saved:empty{display:none}
+  .ussd-link{
+    font:inherit; font-size:13px; padding:0; background:none; border:none;
+    color:var(--faint); cursor:pointer; text-decoration:underline;
+    text-underline-offset:3px; transition:color .15s;
+  }
+  .ussd-link:hover{color:var(--ink)}
+  .ussd-link:disabled{opacity:.45; cursor:wait}
+  .ussd-chip{
+    display:inline-flex; align-items:center;
+    background:var(--surface); border:1px solid var(--line); border-radius:999px;
+    padding:0 4px 0 14px; font-size:14px; color:var(--muted);
+  }
+  .ussd-chip .lbl{padding:8px 0}
+  .ussd-x{
+    font:inherit; font-size:16px; line-height:1; cursor:pointer;
+    background:none; border:none; color:var(--faint);
+    padding:5px 8px; margin-left:2px; border-radius:50%; transition:color .15s;
+  }
+  .ussd-x:hover{color:var(--poor)}
+  .ussd-x:disabled{opacity:.45; cursor:wait}
   .ussd-row{display:flex; gap:8px; margin-bottom:10px}
   .ussd-input{
     flex:1; min-width:0; font:inherit; font-size:14px; padding:8px 14px;
@@ -198,7 +218,16 @@
 
   <section id="ussd-panel">
     <h2>USSD</h2>
-    <div class="seg" id="ussd-saved"></div>
+    <div class="ussd-saved-row">
+      <div class="seg" id="ussd-saved"></div>
+      <button type="button" id="ussd-manage" class="ussd-link">Manage</button>
+    </div>
+    <form id="ussd-save-form" class="ussd-row" hidden>
+      <input id="ussd-save-label" class="ussd-input" placeholder="Label" autocomplete="off">
+      <input id="ussd-save-code" class="ussd-input" placeholder="*310#" autocomplete="off">
+      <button type="submit" class="ussd-btn">Add</button>
+    </form>
+    <div id="ussd-manage-msg" class="modehint" hidden></div>
     <form id="ussd-form" class="ussd-row">
       <input id="ussd-code" class="ussd-input" placeholder="*310#" autocomplete="off">
       <button type="submit" class="ussd-btn">Send</button>
@@ -412,6 +441,11 @@ poll(); loadMode(); schedule();
   const replyInput = document.getElementById('ussd-reply');
   const spinner = document.getElementById('ussd-spinner');
   const savedBox = document.getElementById('ussd-saved');
+  const manageBtn = document.getElementById('ussd-manage');
+  const saveForm = document.getElementById('ussd-save-form');
+  const saveLabel = document.getElementById('ussd-save-label');
+  const saveCode = document.getElementById('ussd-save-code');
+  const manageMsg = document.getElementById('ussd-manage-msg');
 
   let busy = false;
   function setBusy(state) {
@@ -464,20 +498,80 @@ poll(); loadMode(); schedule();
     }
   }
 
-  async function loadSaved() {
+  /* Saved-code management is deliberately kept off the call()/show() path:
+     these endpoints return {codes}, not the {text, state} shape show() is
+     contracted for, and a failure to save should not overwrite a USSD reply. */
+  let saved = [];
+  let managing = false;
+
+  function note(msg) {
+    manageMsg.hidden = !msg;
+    manageMsg.textContent = msg || '';
+  }
+
+  function renderSaved() {
     savedBox.innerHTML = '';
-    try {
-      const r = await fetch('/api/ussd/codes');
-      const data = await r.json();
-      for (const c of data.codes) {
+    for (const c of saved) {
+      if (!managing) {
         const b = document.createElement('button');
         b.type = 'button';
         b.textContent = c.label;
         b.title = c.code;
         b.onclick = () => call('/api/ussd/send', { code: c.code });
         savedBox.appendChild(b);
+        continue;
       }
-    } catch (e) { /* leave saved row empty */ }
+      const chip = document.createElement('span');
+      chip.className = 'ussd-chip';
+      const lbl = document.createElement('span');
+      lbl.className = 'lbl';
+      lbl.textContent = c.label;
+      chip.title = c.code;
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'ussd-x';
+      x.textContent = '×';
+      x.setAttribute('aria-label', 'Remove ' + c.label);
+      x.onclick = () => store('DELETE', { label: c.label });
+      chip.append(lbl, x);
+      savedBox.appendChild(chip);
+    }
+  }
+
+  async function store(method, body) {
+    if (busy) return;
+    busy = true;
+    setBusy(true);
+    try {
+      const r = await fetch('/api/ussd/codes', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const detail = await r.json().catch(() => ({}));
+        note(detail.detail || 'could not save (' + r.status + ')');
+        return;
+      }
+      saved = (await r.json()).codes;
+      note('');
+      renderSaved();
+    } catch (e) {
+      note(String(e));
+    } finally {
+      setBusy(false);
+      busy = false;
+    }
+  }
+
+  async function loadSaved() {
+    try {
+      const r = await fetch('/api/ussd/codes');
+      saved = (await r.json()).codes;
+    } catch (e) {
+      saved = [];
+    }
+    renderSaved();
   }
 
   sendForm.addEventListener('submit', (e) => {
@@ -495,6 +589,29 @@ poll(); loadMode(); schedule();
   document.getElementById('ussd-cancel').addEventListener('click', () => {
     replyForm.hidden = true;
     call('/api/ussd/cancel', null, onCancelled).then(loadSaved);
+  });
+
+  /* Manage mode keeps the default row clean: saved codes are plain one-click
+     send buttons until you opt in, so a remove control is never sitting next
+     to a button you meant to press. */
+  manageBtn.addEventListener('click', () => {
+    managing = !managing;
+    manageBtn.textContent = managing ? 'Done' : 'Manage';
+    saveForm.hidden = !managing;
+    note('');
+    if (managing && !saveCode.value) saveCode.value = codeInput.value.trim();
+    renderSaved();
+    if (managing) saveLabel.focus();
+  });
+
+  saveForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const label = saveLabel.value.trim();
+    const code = saveCode.value.trim();
+    if (!label || !code) { note('Both a label and a code are required.'); return; }
+    store('POST', { label, code }).then(() => {
+      if (!manageMsg.textContent) { saveLabel.value = ''; saveCode.value = ''; saveLabel.focus(); }
+    });
   });
 
   loadSaved();
