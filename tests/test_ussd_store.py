@@ -1,3 +1,6 @@
+import stat
+import sys
+
 from zlt import ussd_store
 from zlt.config import ussd_store_path
 
@@ -15,7 +18,10 @@ def test_save_then_load_roundtrip(monkeypatch, tmp_path):
     _use_tmp(monkeypatch, tmp_path)
     ussd_store.save_code("Check balance", "*310#")
     assert ussd_store.load_codes() == [{"label": "Check balance", "code": "*310#"}]
-    assert oct(ussd_store_path().stat().st_mode)[-3:] == "600"
+    if sys.platform != "win32":
+        # NTFS has no POSIX permission bits; os.open's mode argument is
+        # effectively ignored on Windows, so this assertion doesn't apply.
+        assert stat.S_IMODE(ussd_store_path().stat().st_mode) == 0o600
 
 
 def test_save_upserts_by_case_insensitive_label(monkeypatch, tmp_path):
