@@ -41,7 +41,11 @@ class UssdResult:
     state: str  # complete | prompt | error | timeout  (pending is internal only)
 
 
-# --- USSD (assumed ZTE reqproc contract; verify live, see plan) ---------------
+# --- USSD -------------------------------------------------------------------
+# Captured live from an MTN ZLT T10D MAX (ZTE NV8645): the device's own
+# js/service.js drives this state machine, and the values below were confirmed
+# against the live router. Any other firmware that differs should only need
+# changes here and in _classify_flag / _read_ussd_data / _decode_ussd.
 USSD_SEND_GOFORM = "USSD_PROCESS"
 USSD_OPERATOR_FIELD = "USSD_operator"
 USSD_SEND_FIELD = "USSD_send_number"
@@ -49,14 +53,29 @@ USSD_REPLY_FIELD = "USSD_reply_number"
 USSD_OP_SEND = "ussd_send"
 USSD_OP_REPLY = "ussd_reply"
 USSD_OP_CANCEL = "ussd_cancel"
-USSD_FLAG_KEY = "ussd_write_flag"
-USSD_DATA_KEY = "ussd_data_info"
-USSD_READ_KEYS = [USSD_FLAG_KEY, USSD_DATA_KEY]
-USSD_FLAG_PENDING = "0"
-USSD_FLAG_RECEIVED = "1"
-USSD_FLAG_TIMEOUT = "2"
-USSD_FLAG_ERROR = "3"
-USSD_ACTION_PROMPT = "1"  # ussd_action value meaning "network wants a reply"
+
+USSD_FLAG_KEY = "ussd_write_flag"  # polled on its own
+USSD_DATA_CMD = "ussd_data_info"  # aggregate cmd, must be requested alone
+USSD_DATA_FIELD = "ussd_data"
+USSD_ACTION_FIELD = "ussd_action"
+USSD_DCS_FIELD = "ussd_dcs"
+
+USSD_FLAG_PENDING = "15"  # still waiting on the network, poll again
+USSD_FLAG_RECEIVED = "16"  # a reply is ready, fetch USSD_DATA_CMD
+USSD_FLAG_TIMEOUT = {"3", "4", "unknown"}
+USSD_FLAG_ERRORS = {
+    "1": "no service",
+    "2": "network terminated",
+    "10": "retry",
+    "41": "operation not supported",
+    "99": "unsupported",
+}
+# ussd_action "0" is a terminal reply, "1" means the network wants a reply.
+# Both confirmed live: *310# (balance) answers with "0", *323# (a balance menu)
+# answers with "1" and then accepts a menu selection.
+USSD_ACTION_PROMPT = "1"
+USSD_DCS_UCS2_MASK = 0x0C  # (dcs & 0x0C) == 0x08 means UCS2, e.g. 0x48 ("72")
+USSD_DCS_UCS2_VALUE = 0x08
 USSD_TIMEOUT = 20.0
 USSD_POLL_INTERVAL = 1.0
 
@@ -97,6 +116,32 @@ def encode_username(username: str) -> str:
 def encode_password(random_login: str, password: str) -> str:
     digest = hashlib.sha256((random_login + password).encode("utf-8")).hexdigest()
     return base64.b64encode(digest.encode("ascii")).decode("ascii")
+
+
+def _decode_ussd(data: str, dcs: str) -> str:
+    """Decode a USSD ussd_data payload using its data-coding-scheme.
+
+    The device returns ussd_data as a hex string. DCS 0x48 ("72") is UCS2 and
+    decodes as UTF-16BE; other coding schemes are treated as one byte per
+    character. Anything that is not valid hex (some firmwares send plain text)
+    is returned unchanged.
+    """
+    if not data:
+        return ""
+    try:
+        raw = bytes.fromhex(data)
+    except ValueError:
+        return data
+    try:
+        dcs_value = int(dcs)
+    except (TypeError, ValueError):
+        dcs_value = 0
+    if (dcs_value & USSD_DCS_UCS2_MASK) == USSD_DCS_UCS2_VALUE:
+        try:
+            return raw.decode("utf-16-be")
+        except UnicodeDecodeError:
+            return data
+    return raw.decode("latin-1")
 
 
 class ZltClient:
@@ -248,35 +293,48 @@ class ZltClient:
     def _ussd_poll(self, timeout: float, interval: float) -> UssdResult:
         deadline = time.monotonic() + timeout
         while True:
-            result = self._parse_ussd(self.get(*USSD_READ_KEYS))
-            if result.state != "pending":
-                return result
+            state = self._classify_flag(self.get(USSD_FLAG_KEY))
+            if state == "received":
+                return self._read_ussd_data()
+            if state == "timeout":
+                return UssdResult("", "timeout")
+            if state.startswith("error:"):
+                return UssdResult(state[len("error:"):], "error")
+            # pending ("15", or any other flag the device reports while working)
             if time.monotonic() >= deadline:
                 return UssdResult("", "timeout")
             time.sleep(interval)
 
-    def _parse_ussd(self, raw: dict) -> UssdResult:
+    def _classify_flag(self, raw: dict) -> str:
+        """Map a ussd_write_flag poll response to received/timeout/error:<msg>/pending.
+
+        Raises UssdError when the flag key is absent entirely, which means the
+        device speaks a different USSD API than the one captured here. Failing
+        fast beats silently polling until the timeout.
+        """
         if USSD_FLAG_KEY not in raw:
             raise UssdError(
                 f"unexpected USSD poll response (no '{USSD_FLAG_KEY}' key); "
                 f"the device may use a different USSD API: {raw}"
             )
         flag = str(raw.get(USSD_FLAG_KEY, "")).strip()
-        info = raw.get(USSD_DATA_KEY, "")
-        if isinstance(info, dict):
-            text = str(info.get("ussd_data", ""))
-            action = str(info.get("ussd_action", "")).strip()
-        else:
-            text = str(info)
-            action = ""
-        if flag == USSD_FLAG_TIMEOUT:
-            return UssdResult("", "timeout")
-        if flag == USSD_FLAG_ERROR:
-            return UssdResult(text, "error")
-        if flag == USSD_FLAG_RECEIVED and (text or action):
-            state = "prompt" if action == USSD_ACTION_PROMPT else "complete"
-            return UssdResult(text, state)
-        return UssdResult("", "pending")
+        if flag == USSD_FLAG_RECEIVED:
+            return "received"
+        if flag in USSD_FLAG_TIMEOUT:
+            return "timeout"
+        if flag in USSD_FLAG_ERRORS:
+            return "error:" + USSD_FLAG_ERRORS[flag]
+        return "pending"
+
+    def _read_ussd_data(self) -> UssdResult:
+        data = self.get(USSD_DATA_CMD)
+        text = _decode_ussd(
+            str(data.get(USSD_DATA_FIELD, "")),
+            str(data.get(USSD_DCS_FIELD, "")),
+        )
+        action = str(data.get(USSD_ACTION_FIELD, "")).strip()
+        state = "prompt" if action == USSD_ACTION_PROMPT else "complete"
+        return UssdResult(text, state)
 
     # --- session persistence ---------------------------------------------------
     def _save_session(self) -> None:
