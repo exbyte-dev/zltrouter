@@ -1,6 +1,6 @@
 [project]
 name = "zlt"
-version = "0.5.0"
+version = "0.6.0"
 description = "CLI for the MTN ZLT T10D MAX (ZTE NV8645) router"
 requires-python = ">=3.11"
 dependencies = [
