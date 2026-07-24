@@ -2,8 +2,10 @@ import base64
 import hashlib
 import json
 import os
+import re
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import requests
@@ -35,10 +37,24 @@ class UssdError(ZltError):
     """The router returned an unparseable USSD reply."""
 
 
+class SmsError(ZltError):
+    """An SMS could not be read, sent, or confirmed."""
+
+
 @dataclass
 class UssdResult:
     text: str
     state: str  # complete | prompt | error | timeout  (pending is internal only)
+
+
+@dataclass
+class SmsMessage:
+    id: str
+    number: str
+    text: str
+    date: str  # "YYYY-MM-DD HH:MM", or the device's raw string if unparseable
+    unread: bool
+    outgoing: bool
 
 
 # --- USSD -------------------------------------------------------------------
@@ -80,6 +96,55 @@ USSD_TIMEOUT = 20.0
 USSD_POLL_INTERVAL = 1.0
 
 
+# --- SMS ---------------------------------------------------------------------
+# Captured from the device's own js/service.js (sendSMS, getSMSMessages,
+# getSmsStatusInfo) and js/util.js (getCurrentTimeString, encodeMessage,
+# getEncodeType), then confirmed against the live router. As with USSD, a
+# firmware that differs should only need changes in this block and the helpers
+# just below it.
+SMS_LIST_CMD = "sms_data_total"  # aggregate cmd, takes its own query params
+SMS_STATUS_CMD = "sms_cmd_status_info"
+# Deliberately not used: the device also exposes sms_unread_num, but it was
+# observed reporting 0 while the inbox still held rows tagged unread. The unread
+# count is derived from the rows instead, so the badge always agrees with the
+# list underneath it.
+SMS_SEND_GOFORM = "SEND_SMS"
+
+# Read parameters. data_per_page is advisory: the device answered with ten
+# messages when asked for three, so the cap is applied again on our side.
+SMS_MEM_STORE = "1"
+SMS_TAGS_ALL = "10"
+SMS_ORDER_BY = "order by id desc"
+SMS_PAGE_SIZE = "500"
+
+# tag: "1" is an unread inbox message (confirmed live - the count of tag "1"
+# rows matched sms_unread_num). The outgoing tags come from the stock UI's own
+# folder mapping and are not exercised on a device with no sent messages.
+SMS_TAG_UNREAD = "1"
+SMS_TAGS_OUTGOING = frozenset({"2", "3", "4"})
+
+# Send. ID "-1" is a new message rather than an edited draft; after the POST is
+# accepted the device reports progress on sms_cmd slot 4.
+SMS_NEW_ID = "-1"
+SMS_SEND_CMD = "4"
+SMS_STATUS_FIELD = "sms_cmd_status_result"
+SMS_STATUS_FAILED = "2"
+SMS_STATUS_SENT = "3"
+SMS_SETTLE = 1.0  # the stock UI waits this long before the first status poll
+SMS_TIMEOUT = 30.0
+SMS_POLL_INTERVAL = 3.0
+
+# GSM 03.38 basic set, lifted verbatim from the device's GSM7_Table. A message
+# made entirely of these goes out as GSM7 (160 characters per part); anything
+# else has to be UNICODE (70 per part), so this decides the message's cost.
+GSM7_CHARS = frozenset(
+    "\n\x0c\r !\"#$%&'()*+,-./0123456789:;<=>?@"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_"
+    "abcdefghijklmnopqrstuvwxyz{|}~"
+    "\xa0¡£¤¥§¿ÄÅÆÇÉÑÖØÜßàäåæèéìñòöøùüΓΔΘΛΞΠΣΦΨΩ€"
+)
+
+
 BEARER_MAP: dict[str, str] = {
     "auto": "NETWORK_auto",
     "lte": "Only_LTE",
@@ -118,6 +183,18 @@ def encode_password(random_login: str, password: str) -> str:
     return base64.b64encode(digest.encode("ascii")).decode("ascii")
 
 
+def _hex_bytes(data: str) -> bytes | None:
+    """Parse a device hex payload, or None if it is not hex.
+
+    Both USSD replies and SMS bodies arrive hex-encoded, and both have to
+    tolerate firmwares that send plain text instead.
+    """
+    try:
+        return bytes.fromhex(data)
+    except ValueError:
+        return None
+
+
 def _decode_ussd(data: str, dcs: str) -> str:
     """Decode a USSD ussd_data payload using its data-coding-scheme.
 
@@ -128,9 +205,8 @@ def _decode_ussd(data: str, dcs: str) -> str:
     """
     if not data:
         return ""
-    try:
-        raw = bytes.fromhex(data)
-    except ValueError:
+    raw = _hex_bytes(data)
+    if raw is None:
         return data
     try:
         dcs_value = int(dcs)
@@ -142,6 +218,72 @@ def _decode_ussd(data: str, dcs: str) -> str:
         except UnicodeDecodeError:
             return data
     return raw.decode("latin-1")
+
+
+def _decode_sms(content: str) -> str:
+    """Decode an SMS body. Unlike USSD these carry no DCS: always UCS2 hex."""
+    if not content:
+        return ""
+    raw = _hex_bytes(content)
+    if raw is None:
+        return content
+    try:
+        text = raw.decode("utf-16-be")
+    except UnicodeDecodeError:
+        return content
+    # The device pads short bodies with NULs; the stock UI drops them too.
+    return text.replace("\x00", "")
+
+
+def _encode_sms(text: str) -> str:
+    """Encode an outgoing body the way MessageBody expects: UCS2 hex."""
+    return text.encode("utf-16-be").hex().upper()
+
+
+def _sms_encode_type(text: str) -> str:
+    return "GSM7_default" if all(c in GSM7_CHARS for c in text) else "UNICODE"
+
+
+def _sms_time(when: datetime | None = None) -> str:
+    """Format sms_time the way the device's getCurrentTimeString() does.
+
+    "YY;MM;DD;HH;MM;SS;<signed whole-hour UTC offset>", e.g. 26;07;24;15;28;20;+1.
+    """
+    when = when or datetime.now().astimezone()
+    offset = when.utcoffset() or timedelta(0)
+    hours = int(offset.total_seconds() / 3600)
+    sign = "+" if hours >= 0 else ""
+    return f"{when:%y;%m;%d;%H;%M;%S};{sign}{hours}"
+
+
+def _sms_from_row(row: dict) -> SmsMessage:
+    """Build an SmsMessage from one raw device row."""
+    tag = str(row.get("tag", "")).strip()
+    return SmsMessage(
+        id=str(row.get("id", "")),
+        number=str(row.get("number", "")),  # plain text, unlike the body
+        text=_decode_sms(str(row.get("content", ""))),
+        date=_parse_sms_date(str(row.get("date", ""))),
+        unread=tag == SMS_TAG_UNREAD,
+        outgoing=tag in SMS_TAGS_OUTGOING,
+    )
+
+
+def _parse_sms_date(raw: str) -> str:
+    """Turn the device's inbox timestamp into something readable.
+
+    Live samples come back comma-separated ("26,07,24,15,28,20,+4"); the stock
+    UI's own parser accepts semicolons too, so both are handled. Anything that
+    does not fit is handed back untouched rather than guessed at.
+    """
+    parts = re.split(r"[;,]", raw.strip())
+    if len(parts) < 6:
+        return raw
+    try:
+        yy, mm, dd, hh, mi = (int(p) for p in parts[:5])
+    except ValueError:
+        return raw
+    return f"20{yy:02d}-{mm:02d}-{dd:02d} {hh:02d}:{mi:02d}"
 
 
 class ZltClient:
@@ -165,12 +307,17 @@ class ZltClient:
         self._load_session()
 
     # --- reads ---------------------------------------------------------------
-    def get(self, *cmds: str, multi: bool | None = None) -> dict:
+    def get(self, *cmds: str, multi: bool | None = None,
+            extra: dict | None = None) -> dict:
         params = {"isTest": "false", "cmd": ",".join(cmds)}
         if multi is None:
             multi = len(cmds) > 1
         if multi:
             params["multi_data"] = "1"
+        if extra:
+            # Some aggregate cmds (the SMS inbox, the SMS status slot) carry
+            # their own query parameters alongside cmd.
+            params.update(extra)
         try:
             resp = self.http.get(
                 f"{self.config.host}/reqproc/proc_get",
@@ -335,6 +482,70 @@ class ZltClient:
         action = str(data.get(USSD_ACTION_FIELD, "")).strip()
         state = "prompt" if action == USSD_ACTION_PROMPT else "complete"
         return UssdResult(text, state)
+
+    # --- SMS ------------------------------------------------------------------
+    def sms_list(self, limit: int = 50) -> list[SmsMessage]:
+        """Read the inbox, newest first."""
+        self.ensure_session()
+        data = self.get(SMS_LIST_CMD, extra={
+            "page": "0",
+            "data_per_page": SMS_PAGE_SIZE,
+            "mem_store": SMS_MEM_STORE,
+            "tags": SMS_TAGS_ALL,
+            "order_by": SMS_ORDER_BY,
+        })
+        rows = data.get("messages")
+        if not isinstance(rows, list):
+            # Same reasoning as _classify_flag: a device that speaks a different
+            # SMS API should say so, not hand back a silently empty inbox.
+            raise SmsError(
+                f"unexpected inbox response (no 'messages' list); "
+                f"the device may use a different SMS API: {data}"
+            )
+        # data_per_page is advisory - the device returned ten rows when asked
+        # for three - so the cap is enforced here too.
+        return [_sms_from_row(row) for row in rows[:limit]]
+
+    def sms_send(self, number: str, text: str, *, timeout: float = SMS_TIMEOUT,
+                 interval: float = SMS_POLL_INTERVAL,
+                 settle: float = SMS_SETTLE) -> None:
+        """Send one message and wait for the network to confirm it."""
+        number, text = number.strip(), text.strip()
+        if not number:
+            raise SmsError("no recipient")
+        if not text:
+            raise SmsError("empty message")
+        data = self.post(SMS_SEND_GOFORM, **{
+            "Number": number,
+            "sms_time": _sms_time(),
+            "MessageBody": _encode_sms(text),
+            "ID": SMS_NEW_ID,
+            "encode_type": _sms_encode_type(text),
+        })
+        if str(data.get("result")) != "success":
+            raise SmsError(
+                f"router rejected the message: result={data.get('result')}")
+        if settle:
+            # The stock UI gives the modem a moment before its first poll.
+            time.sleep(settle)
+        self._sms_poll(timeout, interval)
+
+    def _sms_poll(self, timeout: float, interval: float) -> None:
+        deadline = time.monotonic() + timeout
+        while True:
+            data = self.get(SMS_STATUS_CMD, extra={"sms_cmd": SMS_SEND_CMD})
+            status = str(data.get(SMS_STATUS_FIELD, "")).strip()
+            if status == SMS_STATUS_SENT:
+                return
+            if status == SMS_STATUS_FAILED:
+                raise SmsError("the network rejected the message")
+            # No status field at all means nothing is queued on that slot yet:
+            # the live device answers {"messages": []} until the send lands.
+            # Treat it as pending so a slow network is not called a failure.
+            if time.monotonic() >= deadline:
+                raise SmsError(
+                    "timed out waiting for the network to confirm the message")
+            time.sleep(interval)
 
     # --- session persistence ---------------------------------------------------
     def _save_session(self) -> None:

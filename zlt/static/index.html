@@ -109,9 +109,26 @@
   .row .v:empty::after{content:"—"; color:var(--faint)}
   #bigVal:empty::after{content:"···"; color:var(--faint)}
 
+  .sms-list{background:var(--surface); border:1px solid var(--line); border-radius:10px;
+    padding:4px 18px; margin-bottom:12px}
+  .sms-list:empty{display:none}
+  .sms-msg{padding:12px 0; border-bottom:1px solid var(--line-soft)}
+  .sms-msg:last-child{border-bottom:none}
+  .sms-head{display:flex; align-items:baseline; gap:8px; margin-bottom:4px}
+  .sms-from{font-size:14px; color:var(--ink)}
+  .sms-msg.unread .sms-from{font-weight:600}
+  .sms-when{font-family:var(--nums); font-size:12px; color:var(--faint); margin-left:auto;
+    flex-shrink:0}
+  .sms-dot{width:6px; height:6px; border-radius:50%; background:var(--q); flex-shrink:0}
+  .sms-body{font-size:14px; color:var(--muted); white-space:pre-wrap; word-break:break-word}
+  .sms-empty{font-size:13px; color:var(--faint); margin-bottom:12px}
+  .sms-badge{font-family:var(--nums)}
+  #sms-compose{flex-wrap:wrap}
+  #sms-text{flex:2 1 220px}
+
   .speed-actions{display:flex; align-items:center; gap:12px; margin-top:12px}
   .speed-actions .modehint{margin-top:0}
-  #speed-status.error{color:var(--poor)}
+  #speed-status.error, #sms-status.error{color:var(--poor)}
   .readings .row .v.live{color:var(--muted)}
 
   .ussd-saved-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px}
@@ -239,6 +256,21 @@
   <section>
     <h2>Readings</h2>
     <div class="readings" id="readings"></div>
+  </section>
+
+  <section id="sms-panel">
+    <h2>Messages <span class="caption sms-badge" id="sms-badge"></span></h2>
+    <div class="ussd-saved-row">
+      <button type="button" id="sms-refresh" class="ussd-link">Refresh</button>
+    </div>
+    <div class="sms-empty" id="sms-empty" hidden>no messages</div>
+    <div class="sms-list" id="sms-list"></div>
+    <form id="sms-compose" class="ussd-row">
+      <input id="sms-number" class="ussd-input" placeholder="Number" autocomplete="off">
+      <input id="sms-text" class="ussd-input" placeholder="Message" autocomplete="off">
+      <button type="submit" class="ussd-btn">Send</button>
+    </form>
+    <div id="sms-status" class="modehint"></div>
   </section>
 
   <section id="speed-panel">
@@ -679,6 +711,122 @@ poll(); loadMode(); schedule();
   });
 
   loadSaved();
+})();
+</script>
+
+<script>
+/* Messages.
+
+   Every row is built with createElement/textContent rather than innerHTML.
+   The sender and body of an SMS arrive off the mobile network, which makes
+   them the one thing on this page a stranger gets to write.
+
+   The inbox is loaded on open and after a send, not on the status poll: a
+   read holds the same router lock the signal poll needs, and the device is
+   slow enough that polling both would make the panel fight itself. Refresh is
+   an explicit button instead. */
+(function () {
+  "use strict";
+  const panel = document.getElementById('sms-panel');
+  const listEl = document.getElementById('sms-list');
+  const emptyEl = document.getElementById('sms-empty');
+  const badgeEl = document.getElementById('sms-badge');
+  const statusEl = document.getElementById('sms-status');
+  const form = document.getElementById('sms-compose');
+  const numberInput = document.getElementById('sms-number');
+  const textInput = document.getElementById('sms-text');
+  const refreshBtn = document.getElementById('sms-refresh');
+
+  let busy = false;
+  function setBusy(state) {
+    busy = state;
+    panel.querySelectorAll('button').forEach(b => b.disabled = state);
+  }
+
+  function say(msg, isError) {
+    statusEl.textContent = msg || '';
+    statusEl.classList.toggle('error', !!isError);
+  }
+
+  function render(messages, unread) {
+    listEl.innerHTML = '';
+    emptyEl.hidden = messages.length > 0;
+    badgeEl.textContent = unread ? unread + ' unread' : '';
+    for (const m of messages) {
+      const row = document.createElement('div');
+      row.className = m.unread ? 'sms-msg unread' : 'sms-msg';
+
+      const head = document.createElement('div');
+      head.className = 'sms-head';
+      if (m.unread) {
+        const dot = document.createElement('span');
+        dot.className = 'sms-dot';
+        head.appendChild(dot);
+      }
+      const from = document.createElement('span');
+      from.className = 'sms-from';
+      from.textContent = m.outgoing ? 'to ' + m.number : m.number;
+      const when = document.createElement('span');
+      when.className = 'sms-when';
+      when.textContent = m.date;
+      head.append(from, when);
+
+      const body = document.createElement('div');
+      body.className = 'sms-body';
+      body.textContent = m.text;
+
+      row.append(head, body);
+      listEl.appendChild(row);
+    }
+  }
+
+  async function load() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await fetch('/api/sms');
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.detail || 'HTTP ' + r.status);
+      render(data.messages, data.unread);
+      say('');
+    } catch (e) {
+      say('inbox: ' + (e.message || e), true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    const number = numberInput.value.trim();
+    const text = textInput.value.trim();
+    if (!number || !text) {
+      say('A number and a message are both required.', true);
+      return;
+    }
+    setBusy(true);
+    say('sending…');
+    try {
+      const r = await fetch('/api/sms/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ number: number, text: text }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.detail || 'HTTP ' + r.status);
+      textInput.value = '';
+      say('sent');
+    } catch (e) {
+      say('send failed: ' + (e.message || e), true);
+    } finally {
+      setBusy(false);
+    }
+    load();
+  });
+
+  refreshBtn.addEventListener('click', load);
+  load();
 })();
 </script>
 

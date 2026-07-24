@@ -29,6 +29,7 @@ from zlt.client import (
     LoginError,
     RouterError,
     RouterUnreachable,
+    SmsError,
     UssdError,
     ZltClient,
 )
@@ -56,6 +57,11 @@ class UssdCodeLabel(BaseModel):
     label: str
 
 
+class SmsSendBody(BaseModel):
+    number: str
+    text: str
+
+
 def _resolve_configured(data: dict) -> str:
     return (
         data.get("net_select")
@@ -80,6 +86,8 @@ def create_app(client: ZltClient) -> FastAPI:
         except LoginError as exc:
             raise HTTPException(status_code=401, detail=str(exc))
         except UssdError as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
+        except SmsError as exc:
             raise HTTPException(status_code=502, detail=str(exc))
         except RouterError as exc:
             raise HTTPException(status_code=502, detail=str(exc))
@@ -193,6 +201,37 @@ def create_app(client: ZltClient) -> FastAPI:
                 status_code=404, detail=f"no saved code labelled '{body.label}'"
             )
         return {"codes": ussd_store.load_codes()}
+
+    @app.get("/api/sms")
+    def sms_list() -> dict:
+        def work() -> dict:
+            with lock:
+                messages = client.sms_list()
+            # Counted from the rows rather than read from the device's
+            # sms_unread_num, which was seen reporting 0 with unread rows still
+            # in the inbox. A badge that disagrees with the list is worse than
+            # no badge.
+            return {
+                "unread": sum(1 for m in messages if m.unread),
+                "messages": [asdict(m) for m in messages],
+            }
+
+        return _guard(work)
+
+    @app.post("/api/sms/send")
+    def sms_send(body: SmsSendBody) -> dict:
+        number, text = body.number.strip(), body.text.strip()
+        if not number:
+            raise HTTPException(status_code=422, detail="no recipient")
+        if not text:
+            raise HTTPException(status_code=422, detail="empty message")
+
+        def work() -> dict:
+            with lock:
+                client.sms_send(number, text)
+                return {"ok": True}
+
+        return _guard(work)
 
     @app.post("/api/ussd/send")
     def ussd_send(body: UssdSendBody) -> dict:

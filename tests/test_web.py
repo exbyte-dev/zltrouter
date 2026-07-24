@@ -124,6 +124,13 @@ def test_index_has_speed_panel():
     assert "/api/speedtest/config" in r.text
 
 
+def test_index_has_sms_panel():
+    r = make(StubClient()).get("/")
+    assert r.status_code == 200
+    assert 'id="sms-panel"' in r.text
+    assert "/api/sms/send" in r.text
+
+
 def test_web_deps_are_not_optional():
     """The dashboard is the point of the service, so it must not need an extra.
 

@@ -39,6 +39,47 @@ def install_post(result: str = "success", headers: dict | None = None,
     responses.add(responses.POST, PROC_POST, json=body, headers=headers or {})
 
 
+def install_sms(messages=None, *, statuses=("3",),
+                post_result="success", token="1"):
+    """Simulate the device's SMS endpoints.
+
+    `messages` is the raw list handed back for cmd=sms_data_total, in the
+    device's own shape (content as UCS2 hex, number as plain text). `statuses`
+    are sms_cmd_status_result values returned on successive status polls, the
+    last repeating once exhausted; a None entry reproduces what the live device
+    actually answers when no command is in flight, which is {"messages": []}
+    with no status key at all. get_token/get_random_login are answered so the
+    client counts as logged in.
+
+    The cmd/param names are spelled out here rather than imported from the
+    client, so that renaming a constant breaks a test instead of silently
+    moving both sides at once.
+    """
+    state = {"i": 0}
+    messages = list(messages or [])
+    statuses = list(statuses)
+
+    def get_cb(request):
+        cmd = parse_qs(urlparse(request.url).query).get("cmd", [""])[0]
+        if cmd == "get_token":
+            return (200, {}, json.dumps({"token": token}))
+        if cmd == "get_random_login":
+            return (200, {}, json.dumps({"random_login": "12345678"}))
+        if cmd == "sms_data_total":
+            return (200, {}, json.dumps({"messages": messages}))
+        if cmd == "sms_cmd_status_info":
+            status = statuses[min(state["i"], len(statuses) - 1)]
+            state["i"] += 1
+            if status is None:
+                return (200, {}, json.dumps({"messages": []}))
+            return (200, {}, json.dumps(
+                {"sms_cmd": "4", "sms_cmd_status_result": status}))
+        return (200, {}, json.dumps({k: "" for k in cmd.split(",")}))
+
+    responses.add_callback(responses.GET, PROC_GET, callback=get_cb)
+    responses.add(responses.POST, PROC_POST, json={"result": post_result})
+
+
 def install_ussd(flags, data=None, *, post_result="success", token="1"):
     """Simulate the device's two-step USSD handshake.
 

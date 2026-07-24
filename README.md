@@ -137,6 +137,8 @@ Session cache (the authenticated cookie): `$XDG_STATE_HOME/zlt/session.json`
 | `zlt status` | best-effort | Shows signal/network status. Tries to log in for full detail (adds RSRP, band, SNR); falls back to the open subset if no password is configured or login fails. |
 | `zlt net get` | yes | Shows the router's configured network mode, mapped to a friendly name (`auto`, `lte`, `4g3g`, `wcdma`, `gsm`). |
 | `zlt net set <mode>` | yes | Sets the network mode. `<mode>` is one of `auto \| lte \| 4g \| 4g3g \| wcdma \| 3g \| gsm \| 2g`. Verifies the POST result, then re-reads to confirm the change took. |
+| `zlt sms list` | yes | Shows the inbox, newest first, unread marked with `*`. `--limit` caps how many (default 20). |
+| `zlt sms send <number> <text>` | yes | Sends a message and waits for the network to confirm it. Costs money. |
 | `zlt get <cmd> [cmd ...]` | no | Raw `proc_get` passthrough: pretty-prints the JSON response for any key(s) the device supports. |
 | `zlt post <goformId> [key=val ...]` | yes | Raw `proc_post` passthrough: ensures a session, attaches a fresh CSRF token, prints the JSON response. |
 | `zlt login` | yes | Forces a fresh login, prints attempts remaining before the lockout, caches the session cookie. |
@@ -170,6 +172,11 @@ zlt serve --host 0.0.0.0       # reachable from other LAN devices (see note)
   view stays a clean set of send buttons. The list is the same
   `~/.config/zlt/ussd.json` the CLI uses, so codes saved either way show up in
   both.
+- **Messages:** the SMS inbox with unread marked and counted, plus a compose box
+  for sending. Loaded when you open the panel and after each send, with an
+  explicit Refresh, rather than on the status poll: an inbox read takes the same
+  router lock the signal poll wants, and the device is slow enough that polling
+  both would make the panel fight itself.
 - **Speed test:** an on-demand download/upload/ping test that runs in the browser,
   so it measures the link of whatever device you opened the panel on (phone
   included), through the router, out over 4G. The dashboard is not in the data
@@ -207,7 +214,8 @@ These follow the same resolution order as everything else (environment, then
 falls back to the default rather than breaking the panel.
 
 API surface (all JSON): `GET /api/status`, `GET /api/net`,
-`POST /api/net {"mode": "lte"}`, `GET /api/speedtest/config`, `GET /api/ussd/codes`,
+`POST /api/net {"mode": "lte"}`, `GET /api/speedtest/config`, `GET /api/sms`,
+`POST /api/sms/send {"number": "121", "text": "hi"}`, `GET /api/ussd/codes`,
 `POST /api/ussd/codes {"label": "Balance", "code": "*310#"}`,
 `DELETE /api/ussd/codes {"label": "Balance"}`,
 `POST /api/ussd/send {"code": "*310#"}`, `POST /api/ussd/reply {"text": "1"}`,
@@ -312,6 +320,57 @@ of these keys is actually populated on your device before trusting the fallback 
 - `zlt status` requests the open set unconditionally, and additionally requests the
   auth-only set (attempting a login first), falling back to the open-only view with a
   note if there's no password configured or login fails.
+
+### SMS (live-verified)
+
+Derived from the device's `sendSMS` / `getSMSMessages` / `getSmsStatusInfo` in
+`js/service.js` and `getCurrentTimeString` / `encodeMessage` / `getEncodeType` in
+`js/util.js`, then confirmed against the live device. All of it needs a session.
+
+**Read the inbox** (`cmd=sms_data_total`, with its own query parameters
+alongside `cmd`):
+
+```http
+GET /reqproc/proc_get?isTest=false&cmd=sms_data_total&page=0
+    &data_per_page=500&mem_store=1&tags=10&order_by=order by id desc
+→ {"messages": [{"id","number","content","tag","date","draft_group_id"}, ...]}
+```
+
+- `content` is **UCS2 hex** (UTF-16BE, 4 hex digits per unit). NUL padding is stripped.
+- `number` is **plain text**, not hex (`"121"`, `"MTNN"`).
+- `tag` `"1"` is an unread inbox message; `"2"`/`"3"`/`"4"` are the outgoing folders.
+- `date` came back comma-separated on this device (`26,07,24,15,28,20,+4`). The
+  stock UI's own parser also accepts semicolons, so both are handled.
+- `data_per_page` is **advisory**: asked for 3, the device returned 10. The limit
+  is applied again client-side.
+
+**Send** (costs money; confirmed by sending a real message):
+
+```http
+POST /reqproc/proc_post
+  goformId=SEND_SMS & Number=<plain> & sms_time=<YY;MM;DD;HH;MM;SS;+TZ>
+  & MessageBody=<UCS2 hex> & ID=-1 & encode_type=<GSM7_default|UNICODE>
+```
+
+then poll until the network answers:
+
+```http
+GET /reqproc/proc_get?isTest=false&cmd=sms_cmd_status_info&sms_cmd=4
+→ sms_cmd_status_result: "3" sent, "2" failed, anything else keep waiting
+```
+
+- `encode_type` is `GSM7_default` when every character is in the GSM 03.38 basic
+  set (lifted verbatim from the device's `GSM7_Table`), else `UNICODE`. This
+  decides the message's cost: 160 characters per part versus 70. Note that `é` is
+  in the GSM7 set; it takes a genuinely foreign character to force `UNICODE`.
+- `MessageBody` is always UCS2 hex regardless of `encode_type`.
+- **Idle slot quirk:** `sms_cmd_status_info` answers `{"messages": []}`, with no
+  status key at all, when nothing is queued on that slot. A missing status is
+  treated as pending, so a slow send is not misreported as a failure.
+
+**`sms_unread_num` is deliberately unused.** It was observed reporting `0` while
+the inbox still held 29 rows tagged unread. The unread count is derived from the
+rows instead, so the dashboard badge cannot disagree with the list beneath it.
 
 ### Safety / lockout keys
 

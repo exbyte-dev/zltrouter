@@ -17,6 +17,7 @@ from zlt.client import (
     LoginError,
     RouterError,
     RouterUnreachable,
+    SmsError,
     UssdError,
     UssdResult,
     ZltClient,
@@ -221,6 +222,47 @@ def ussd_rm_cmd(label: str) -> None:
         click.echo(f"Removed {label!r}")
     else:
         raise click.ClickException(f"no saved code labelled '{label}'")
+
+
+@cli.group()
+def sms() -> None:
+    """Read the inbox and send text messages."""
+
+
+@sms.command("list")
+@click.option("--limit", default=20, show_default=True, help="How many to show.")
+@click.pass_obj
+def sms_list_cmd(client: ZltClient, limit: int) -> None:
+    """Show the inbox, newest first."""
+    try:
+        messages = client.sms_list(limit=limit)
+    except (LoginError, LockedOut, RouterUnreachable, SmsError) as exc:
+        raise click.ClickException(str(exc))
+    if not messages:
+        click.echo("(no messages)")
+        return
+    for m in messages:
+        mark = "*" if m.unread else " "
+        who = f"to {m.number}" if m.outgoing else m.number
+        click.echo(f"{mark} {m.date}  {who}")
+        # Bodies routinely carry newlines, so indent every line of them rather
+        # than letting the second line start at column zero.
+        for line in m.text.splitlines() or [""]:
+            click.echo(f"      {line}")
+        click.echo()
+
+
+@sms.command("send")
+@click.argument("number")
+@click.argument("text")
+@click.pass_obj
+def sms_send_cmd(client: ZltClient, number: str, text: str) -> None:
+    """Send a message: zlt sms send 08012345678 'hello'."""
+    try:
+        client.sms_send(number, text)
+    except (LoginError, LockedOut, RouterUnreachable, SmsError) as exc:
+        raise click.ClickException(str(exc))
+    click.echo(f"Sent to {number}")
 
 
 @cli.command()
