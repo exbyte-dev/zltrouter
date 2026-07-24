@@ -170,6 +170,14 @@ zlt serve --host 0.0.0.0       # reachable from other LAN devices (see note)
   view stays a clean set of send buttons. The list is the same
   `~/.config/zlt/ussd.json` the CLI uses, so codes saved either way show up in
   both.
+- **Speed test:** an on-demand download/upload/ping test that runs in the browser,
+  so it measures the link of whatever device you opened the panel on (phone
+  included), through the router, out over 4G. The dashboard is not in the data
+  path: proxying the payload would time the serving machine's link instead and
+  push every byte over 4G twice. Both directions are time-boxed rather than
+  fixed-size, so a weak cell finishes in seconds instead of minutes. Default
+  target is Cloudflare's public speed backend; see
+  ["Speed test target"](#speed-test-target) to point it elsewhere.
 - **Light / dark:** follows your system theme by default; the toggle in the header
   overrides it and the choice sticks.
 - Single self-contained HTML page, zero CDN dependencies: it works when the
@@ -181,8 +189,25 @@ The dashboard binds to `127.0.0.1` by default and has **no authentication of its
 own**. If you bind `0.0.0.0`, anyone on the LAN who can reach the port can read
 status and change router settings, so only do that on a network you trust.
 
+### Speed test target
+
+The measurement is browser-to-target with no backend in the middle, so the target
+has to be a public host that sends CORS headers. The default is Cloudflare's
+speed backend, which does:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `ZLT_SPEEDTEST_DOWN_URL` | `https://speed.cloudflare.com/__down` | Download endpoint. A `bytes=` query parameter is appended. |
+| `ZLT_SPEEDTEST_UP_URL` | `https://speed.cloudflare.com/__up` | Upload endpoint, sent a POST body. |
+| `ZLT_SPEEDTEST_DOWN_BYTES` | `25000000` | Upper bound on the download. The stream stops early at 8s, so this is a ceiling, not a fixed cost. |
+| `ZLT_SPEEDTEST_UP_BYTES` | `8000000` | Upper bound on the upload. A 512 KB probe sizes the real run to about 5s, capped here. |
+
+These follow the same resolution order as everything else (environment, then
+`~/.config/zlt/config`, then `./.env`). A non-numeric or non-positive byte count
+falls back to the default rather than breaking the panel.
+
 API surface (all JSON): `GET /api/status`, `GET /api/net`,
-`POST /api/net {"mode": "lte"}`, `GET /api/ussd/codes`,
+`POST /api/net {"mode": "lte"}`, `GET /api/speedtest/config`, `GET /api/ussd/codes`,
 `POST /api/ussd/codes {"label": "Balance", "code": "*310#"}`,
 `DELETE /api/ussd/codes {"label": "Balance"}`,
 `POST /api/ussd/send {"code": "*310#"}`, `POST /api/ussd/reply {"text": "1"}`,

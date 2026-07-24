@@ -11,6 +11,7 @@ Launched via 'zlt serve', or automatically on login via 'zlt service install'.
 from __future__ import annotations
 
 import threading
+from dataclasses import asdict
 from importlib import resources
 
 from fastapi import FastAPI, HTTPException
@@ -31,6 +32,7 @@ from zlt.client import (
     UssdError,
     ZltClient,
 )
+from zlt.config import load_speedtest_config
 
 
 class ModeBody(BaseModel):
@@ -113,6 +115,16 @@ def create_app(client: ZltClient) -> FastAPI:
                 }
 
         return _guard(work)
+
+    # The browser runs the speed test itself, straight against the public
+    # target: proxying the payload through here would measure this machine's
+    # link instead of the viewer's, and burn the bandwidth twice. All the
+    # backend owes it is where to aim.
+    speedtest = load_speedtest_config()
+
+    @app.get("/api/speedtest/config")
+    def speedtest_config() -> dict:
+        return asdict(speedtest)
 
     @app.get("/api/net")
     def net_get() -> dict:
