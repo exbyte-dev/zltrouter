@@ -4,6 +4,7 @@ import json
 import os
 import re
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -130,6 +131,16 @@ SMS_SEND_CMD = "4"
 SMS_STATUS_FIELD = "sms_cmd_status_result"
 SMS_STATUS_FAILED = "2"
 SMS_STATUS_SENT = "3"
+
+# Mark read and delete, from the device's own setSmsRead and deleteMessage.
+# Both address messages with msg_id: the ids joined by ";" *and* a trailing ";".
+# tag 0 is read; the device offers no way back to unread.
+SMS_READ_GOFORM = "SET_MSG_READ"
+SMS_DELETE_GOFORM = "DELETE_SMS"
+SMS_READ_TAG = "0"
+# Delete confirms the same way send does - same status field, same 2/3 codes -
+# and differs only in which sms_cmd slot it reports on.
+SMS_DELETE_CMD = "6"
 SMS_SETTLE = 1.0  # the stock UI waits this long before the first status poll
 SMS_TIMEOUT = 30.0
 SMS_POLL_INTERVAL = 3.0
@@ -254,6 +265,25 @@ def _sms_time(when: datetime | None = None) -> str:
     hours = int(offset.total_seconds() / 3600)
     sign = "+" if hours >= 0 else ""
     return f"{when:%y;%m;%d;%H;%M;%S};{sign}{hours}"
+
+
+def _msg_id_list(ids: Sequence[str]) -> str:
+    """Build the msg_id both SET_MSG_READ and DELETE_SMS expect: "659;658;".
+
+    The device's own setSmsRead and deleteMessage join with ";" and leave a
+    trailing one, so this matches them exactly.
+
+    Ids reach here from an HTTP request body, and ";" is the separator: an id
+    carrying one would quietly widen the operation to messages the caller never
+    picked. Since delete is permanent, that is refused rather than sanitised.
+    """
+    clean = [str(i).strip() for i in ids]
+    if not clean or not all(clean):
+        raise SmsError("no message ids given")
+    for i in clean:
+        if ";" in i or any(c.isspace() for c in i):
+            raise SmsError(f"invalid message id {i!r}")
+    return ";".join(clean) + ";"
 
 
 def _sms_from_row(row: dict) -> SmsMessage:
@@ -530,21 +560,58 @@ class ZltClient:
             time.sleep(settle)
         self._sms_poll(timeout, interval)
 
-    def _sms_poll(self, timeout: float, interval: float) -> None:
+    def sms_mark_read(self, ids: Sequence[str]) -> int:
+        """Mark messages read. Returns how many were addressed.
+
+        One shot: unlike send and delete the device answers immediately and
+        reports nothing on a status slot. There is no way back to unread.
+        """
+        msg_id = _msg_id_list(ids)
+        data = self.post(SMS_READ_GOFORM, msg_id=msg_id, tag=SMS_READ_TAG)
+        if str(data.get("result")) != "success":
+            raise SmsError(
+                f"router refused to mark as read: result={data.get('result')}")
+        return len(ids)
+
+    def sms_delete(self, ids: Sequence[str], *, timeout: float = SMS_TIMEOUT,
+                   interval: float = SMS_POLL_INTERVAL,
+                   settle: float = SMS_SETTLE) -> int:
+        """Delete messages and wait for the device to confirm. Permanent."""
+        msg_id = _msg_id_list(ids)
+        data = self.post(SMS_DELETE_GOFORM, msg_id=msg_id)
+        if str(data.get("result")) != "success":
+            raise SmsError(
+                f"router refused to delete: result={data.get('result')}")
+        if settle:
+            time.sleep(settle)
+        self._sms_poll(timeout, interval, cmd=SMS_DELETE_CMD,
+                       actor="the device", what="the delete")
+        return len(ids)
+
+    def _sms_poll(self, timeout: float, interval: float,
+                  cmd: str = SMS_SEND_CMD, actor: str = "the network",
+                  what: str = "the message") -> None:
+        """Wait on one of the device's sms_cmd status slots.
+
+        Send and delete report the same way - same field, same 2/3 codes - and
+        differ only in the slot, so they share this rather than growing a
+        second copy. Only the wording differs: a send is refused by the network,
+        a delete by the device itself.
+        """
         deadline = time.monotonic() + timeout
         while True:
-            data = self.get(SMS_STATUS_CMD, extra={"sms_cmd": SMS_SEND_CMD})
+            data = self.get(SMS_STATUS_CMD, extra={"sms_cmd": cmd})
             status = str(data.get(SMS_STATUS_FIELD, "")).strip()
             if status == SMS_STATUS_SENT:
                 return
             if status == SMS_STATUS_FAILED:
-                raise SmsError("the network rejected the message")
+                raise SmsError(f"{actor} rejected {what}")
             # No status field at all means nothing is queued on that slot yet:
             # the live device answers {"messages": []} until the send lands.
             # Treat it as pending so a slow network is not called a failure.
             if time.monotonic() >= deadline:
                 raise SmsError(
-                    "timed out waiting for the network to confirm the message")
+                    f"timed out waiting for {actor} to confirm {what}")
             time.sleep(interval)
 
     # --- session persistence ---------------------------------------------------

@@ -98,6 +98,21 @@
   <section id="sms-panel" role="tabpanel" aria-labelledby="tab-messages" hidden>
     <div class="panel-actions">
       <button type="button" id="sms-refresh" class="link-btn">Refresh</button>
+      <button type="button" id="sms-select" class="link-btn">Select</button>
+      <button type="button" id="sms-all" class="link-btn" hidden>Select all</button>
+    </div>
+    <!-- Only rendered in select mode. Delete confirms by swapping this bar to
+         its confirm state rather than opening a dialog. -->
+    <div id="sms-bar" class="card pad sms-bar" hidden>
+      <span class="sms-count" id="sms-count"></span>
+      <span class="sms-bar-actions" id="sms-bar-actions">
+        <button type="button" id="sms-mark" class="btn">Mark read</button>
+        <button type="button" id="sms-delete" class="btn btn-danger">Delete</button>
+      </span>
+      <span class="sms-bar-actions" id="sms-bar-confirm" hidden>
+        <button type="button" id="sms-delete-yes" class="btn btn-danger">Delete</button>
+        <button type="button" id="sms-delete-no" class="btn btn-ghost">Cancel</button>
+      </span>
     </div>
     <div class="sms-empty" id="sms-empty" hidden>no messages</div>
     <div class="card rows sms-list" id="sms-list"></div>

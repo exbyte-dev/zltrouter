@@ -137,8 +137,10 @@ Session cache (the authenticated cookie): `$XDG_STATE_HOME/zlt/session.json`
 | `zlt status` | best-effort | Shows signal/network status. Tries to log in for full detail (adds RSRP, band, SNR); falls back to the open subset if no password is configured or login fails. |
 | `zlt net get` | yes | Shows the router's configured network mode, mapped to a friendly name (`auto`, `lte`, `4g3g`, `wcdma`, `gsm`). |
 | `zlt net set <mode>` | yes | Sets the network mode. `<mode>` is one of `auto \| lte \| 4g \| 4g3g \| wcdma \| 3g \| gsm \| 2g`. Verifies the POST result, then re-reads to confirm the change took. |
-| `zlt sms list` | yes | Shows the inbox, newest first, unread marked with `*`. `--limit` caps how many (default 20). |
+| `zlt sms list` | yes | Shows the inbox, newest first, id in the first column, unread marked with `*`. `--limit` caps how many (default 20). |
 | `zlt sms send <number> <text>` | yes | Sends a message and waits for the network to confirm it. Costs money. |
+| `zlt sms read <id>...` | yes | Marks one or more messages read. The device has no way back to unread. |
+| `zlt sms rm <id>...` | yes | Deletes one or more messages and waits for the device to confirm. Permanent, and it does not prompt. |
 | `zlt get <cmd> [cmd ...]` | no | Raw `proc_get` passthrough: pretty-prints the JSON response for any key(s) the device supports. |
 | `zlt post <goformId> [key=val ...]` | yes | Raw `proc_post` passthrough: ensures a session, attaches a fresh CSRF token, prints the JSON response. |
 | `zlt login` | yes | Forces a fresh login, prints attempts remaining before the lockout, caches the session cookie. |
@@ -180,11 +182,15 @@ zlt serve --host 0.0.0.0       # reachable from other LAN devices (see note)
   `~/.config/zlt/ussd.json` the CLI uses, so codes saved either way show up in
   both.
 - **Messages:** the SMS inbox with unread marked and counted, plus a compose box
-  for sending. The unread count rides on the Messages tab, seeded by a single
-  read once the first status poll succeeds. After that the inbox is read when you
-  open the tab, after each send, and on the explicit Refresh, never on the status
-  poll: an inbox read takes the same router lock the signal poll wants, and the
-  device is slow enough that polling both would make the panel fight itself.
+  for sending. "Select" turns the list into checkboxes with Select all, and marks
+  the selection read or deletes it in one go, the same opt-in pattern the USSD
+  panel uses so a Delete control is never sitting next to a message you meant to
+  read. Deleting asks once, inline. The unread count rides on the Messages tab,
+  seeded by a single read once the first status poll succeeds. After that the
+  inbox is read when you open the tab, after each send, after a mark-read or
+  delete, and on the explicit Refresh, never on the status poll: an inbox read
+  takes the same router lock the signal poll wants, and the device is slow enough
+  that polling both would make the panel fight itself.
 - **Speed test:** an on-demand download/upload/ping test that runs in the browser,
   so it measures the link of whatever device you opened the panel on (phone
   included), through the router, out over 4G. The dashboard is not in the data
@@ -226,7 +232,9 @@ falls back to the default rather than breaking the panel.
 
 API surface (all JSON): `GET /api/status`, `GET /api/net`,
 `POST /api/net {"mode": "lte"}`, `GET /api/speedtest/config`, `GET /api/sms`,
-`POST /api/sms/send {"number": "121", "text": "hi"}`, `GET /api/ussd/codes`,
+`POST /api/sms/send {"number": "121", "text": "hi"}`,
+`POST /api/sms/read {"ids": ["659"]}`, `POST /api/sms/delete {"ids": ["659"]}`,
+`GET /api/ussd/codes`,
 `POST /api/ussd/codes {"label": "Balance", "code": "*310#"}`,
 `DELETE /api/ussd/codes {"label": "Balance"}`,
 `POST /api/ussd/send {"code": "*310#"}`, `POST /api/ussd/reply {"text": "1"}`,
@@ -380,6 +388,29 @@ GET /reqproc/proc_get?isTest=false&cmd=sms_cmd_status_info&sms_cmd=4
 - **Idle slot quirk:** `sms_cmd_status_info` answers `{"messages": []}`, with no
   status key at all, when nothing is queued on that slot. A missing status is
   treated as pending, so a slow send is not misreported as a failure.
+
+**Mark read and delete** (from the device's own `setSmsRead` and `deleteMessage`):
+
+```http
+POST /reqproc/proc_post
+  goformId=SET_MSG_READ & msg_id=<659;658;> & tag=0
+→ result: "success", answered immediately
+
+POST /reqproc/proc_post
+  goformId=DELETE_SMS & msg_id=<659;658;>
+→ result: "success", then poll sms_cmd_status_info with sms_cmd=6
+```
+
+- `msg_id` is the ids joined with `;` **and a trailing `;`**. Both device
+  functions build it that way.
+- `tag=0` is read. The device offers no way back to unread.
+- Delete confirms on the same status field and the same `"3"`/`"2"` codes as
+  send, differing only in the `sms_cmd` slot: `6` for delete, `4` for send. The
+  two share one poll here rather than growing a second copy.
+- `ALL_DELETE_SMS` also exists on the device and is deliberately unused: Select
+  all plus Delete clears the inbox without a second, blunter code path.
+- An id carrying a `;` would widen the operation to messages the caller never
+  picked, so ids are rejected rather than sanitised.
 
 **`sms_unread_num` is deliberately unused.** It was observed reporting `0` while
 the inbox still held 29 rows tagged unread. The unread count is derived from the

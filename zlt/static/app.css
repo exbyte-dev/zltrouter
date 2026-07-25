@@ -193,6 +193,36 @@ svg#spark{display:block; width:100%; height:96px}
 .sms-dot{width:6px; height:6px; border-radius:50%; background:var(--q); flex-shrink:0}
 .sms-body{font-size:14px; color:var(--muted); white-space:pre-wrap; word-break:break-word}
 .sms-empty{font-size:13px; color:var(--faint); margin-bottom:12px}
+
+/* Select mode. Checkboxes exist only here, so the reading view keeps a Delete
+   control from sitting next to a message you meant to read. */
+.sms-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px}
+/* display:flex beats the [hidden] UA rule, so hiding has to be said out loud. */
+.sms-bar[hidden]{display:none}
+.sms-count{font-size:13px; color:var(--muted); margin-right:auto}
+.sms-bar-actions{display:flex; gap:8px}
+.sms-bar-actions[hidden]{display:none}
+.sms-bar .btn{font-size:13px; padding:6px 12px}
+.btn-danger{background:none; color:var(--poor); border:1px solid var(--poor)}
+.btn-danger:hover{background:var(--poor); color:var(--bg); opacity:1}
+/* .btn-ghost turns red on hover, which suits USSD's Cancel (it cancels a live
+   session) but not this one: here Cancel is the safe half of a delete confirm,
+   and two red buttons side by side hide which is which. */
+#sms-delete-no:hover{color:var(--ink); border-color:var(--faint)}
+.sms-msg.selected{background:var(--line-soft); margin:0 -18px; padding-left:18px;
+  padding-right:18px}
+.sms-msg .sms-pick{display:flex; gap:10px; align-items:flex-start}
+.sms-check{
+  appearance:none; width:15px; height:15px; flex-shrink:0; margin:3px 0 0; cursor:pointer;
+  border:1.5px solid var(--faint); border-radius:4px; background:var(--surface);
+  display:grid; place-items:center; transition:background-color .12s, border-color .12s;
+}
+.sms-check:checked{background:var(--ink); border-color:var(--ink)}
+.sms-check:checked::after{
+  content:""; width:4px; height:8px; margin-top:-2px;
+  border:solid var(--bg); border-width:0 2px 2px 0; transform:rotate(45deg);
+}
+.sms-pick-body{flex:1; min-width:0}
 /* Two fields and a button do not fit one phone-width line. Floors rather than
    ratios, because .input carries min-width:0 and without a floor the shorter
    field loses every pixel to the longer one instead of wrapping. */

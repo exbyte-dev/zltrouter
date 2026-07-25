@@ -147,6 +147,14 @@ def test_index_has_sms_panel():
     assert 'id="sms-panel"' in r.text
 
 
+def test_index_has_the_select_mode_controls():
+    r = make(StubClient()).get("/")
+    assert r.status_code == 200
+    for el in ["sms-select", "sms-all", "sms-bar", "sms-mark",
+               "sms-delete", "sms-delete-yes", "sms-delete-no"]:
+        assert f'id="{el}"' in r.text
+
+
 # The panel scripts live under /static/js/ now, so the assertions that used to
 # look for endpoint URLs in the served HTML follow them there.
 def test_static_scripts_call_their_endpoints():
@@ -155,6 +163,8 @@ def test_static_scripts_call_their_endpoints():
         ("ussd.js", "/api/ussd/send"),
         ("speed.js", "/api/speedtest/config"),
         ("sms.js", "/api/sms/send"),
+        ("sms.js", "/api/sms/read"),
+        ("sms.js", "/api/sms/delete"),
         ("net.js", "/api/net"),
         ("signal.js", "/api/status"),
     ]:

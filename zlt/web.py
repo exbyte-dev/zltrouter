@@ -64,6 +64,10 @@ class SmsSendBody(BaseModel):
     text: str
 
 
+class SmsIdsBody(BaseModel):
+    ids: list[str]
+
+
 def _resolve_configured(data: dict) -> str:
     return (
         data.get("net_select")
@@ -242,6 +246,32 @@ def create_app(client: ZltClient) -> FastAPI:
             with lock:
                 client.sms_send(number, text)
                 return {"ok": True}
+
+        return _guard(work)
+
+    # Both SMS writes are POSTs under /api/sms/* rather than a DELETE /api/sms,
+    # so every write on this resource is shaped like send. The client validates
+    # the ids themselves; an empty list is refused here so the router is never
+    # asked to act on nothing.
+    @app.post("/api/sms/read")
+    def sms_read(body: SmsIdsBody) -> dict:
+        if not body.ids:
+            raise HTTPException(status_code=422, detail="no message ids given")
+
+        def work() -> dict:
+            with lock:
+                return {"ok": True, "count": client.sms_mark_read(body.ids)}
+
+        return _guard(work)
+
+    @app.post("/api/sms/delete")
+    def sms_delete(body: SmsIdsBody) -> dict:
+        if not body.ids:
+            raise HTTPException(status_code=422, detail="no message ids given")
+
+        def work() -> dict:
+            with lock:
+                return {"ok": True, "count": client.sms_delete(body.ids)}
 
         return _guard(work)
 

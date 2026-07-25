@@ -13,12 +13,17 @@ class StubConfig:
 
 
 class SmsStub:
-    def __init__(self, messages=None, *, list_exc=None, send_exc=None):
+    def __init__(self, messages=None, *, list_exc=None, send_exc=None,
+                 read_exc=None, delete_exc=None):
         self.config = StubConfig()
         self._messages = list(messages or [])
         self._list_exc = list_exc
         self._send_exc = send_exc
+        self._read_exc = read_exc
+        self._delete_exc = delete_exc
         self.sent = []
+        self.marked = []
+        self.deleted = []
 
     def sms_list(self, limit=50):
         if self._list_exc:
@@ -29,6 +34,18 @@ class SmsStub:
         if self._send_exc:
             raise self._send_exc
         self.sent.append((number, text))
+
+    def sms_mark_read(self, ids):
+        if self._read_exc:
+            raise self._read_exc
+        self.marked.append(list(ids))
+        return len(ids)
+
+    def sms_delete(self, ids):
+        if self._delete_exc:
+            raise self._delete_exc
+        self.deleted.append(list(ids))
+        return len(ids)
 
 
 def make(client):
@@ -101,3 +118,55 @@ def test_send_maps_sms_error_to_502():
     r = make(client).post("/api/sms/send", json={"number": "121", "text": "Hi"})
     assert r.status_code == 502
     assert "rejected" in r.json()["detail"]
+
+
+# --- mark read and delete ----------------------------------------------------
+def test_read_marks_the_given_ids():
+    client = SmsStub()
+    r = make(client).post("/api/sms/read", json={"ids": ["659", "658"]})
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "count": 2}
+    assert client.marked == [["659", "658"]]
+
+
+def test_delete_removes_the_given_ids():
+    client = SmsStub()
+    r = make(client).post("/api/sms/delete", json={"ids": ["659"]})
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "count": 1}
+    assert client.deleted == [["659"]]
+
+
+def test_read_rejects_an_empty_selection():
+    client = SmsStub()
+    r = make(client).post("/api/sms/read", json={"ids": []})
+    assert r.status_code == 422
+    assert client.marked == []
+
+
+def test_delete_rejects_an_empty_selection():
+    """Nothing selected must not reach the router, least of all a delete."""
+    client = SmsStub()
+    r = make(client).post("/api/sms/delete", json={"ids": []})
+    assert r.status_code == 422
+    assert client.deleted == []
+
+
+def test_read_surfaces_sms_errors_as_502():
+    client = SmsStub(read_exc=SmsError("router refused"))
+    r = make(client).post("/api/sms/read", json={"ids": ["659"]})
+    assert r.status_code == 502
+    assert "refused" in r.json()["detail"]
+
+
+def test_delete_surfaces_sms_errors_as_502():
+    client = SmsStub(delete_exc=SmsError("the device rejected the delete"))
+    r = make(client).post("/api/sms/delete", json={"ids": ["659"]})
+    assert r.status_code == 502
+    assert "delete" in r.json()["detail"]
+
+
+def test_delete_surfaces_lockout_as_423():
+    client = SmsStub(delete_exc=LockedOut("locked"))
+    r = make(client).post("/api/sms/delete", json={"ids": ["659"]})
+    assert r.status_code == 423

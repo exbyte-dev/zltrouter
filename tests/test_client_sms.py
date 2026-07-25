@@ -27,6 +27,7 @@ from zlt.client import (
     _parse_sms_date,
     _sms_encode_type,
     _sms_time,
+    _msg_id_list,
 )
 from zlt.config import Config
 
@@ -274,3 +275,116 @@ def test_sms_send_rejects_empty_message(tmp_path):
     install_sms([])
     with pytest.raises(SmsError):
         _client(tmp_path).sms_send("121", "  ", settle=0, interval=0)
+
+
+# --- mark read and delete ----------------------------------------------------
+# Both were captured from the device's own setSmsRead and deleteMessage:
+#   read    goformId=SET_MSG_READ with msg_id="a;b;" and tag=0, answered at once
+#   delete  goformId=DELETE_SMS with msg_id="a;b;", then
+#           cmd=sms_cmd_status_info&sms_cmd=6 until sms_cmd_status_result is
+#           "3" (done) or "2" (failed)
+def test_msg_id_list_joins_with_a_trailing_separator():
+    assert _msg_id_list(["659", "658"]) == "659;658;"
+
+
+def test_msg_id_list_keeps_the_separator_for_one_id():
+    assert _msg_id_list(["657"]) == "657;"
+
+
+def test_msg_id_list_strips_surrounding_space():
+    assert _msg_id_list([" 657 "]) == "657;"
+
+
+@pytest.mark.parametrize("ids", [[], [""], ["   "]])
+def test_msg_id_list_rejects_an_empty_selection(ids):
+    with pytest.raises(SmsError, match="no message ids"):
+        _msg_id_list(ids)
+
+
+@pytest.mark.parametrize("bad", ["1;2", "1 2", "1\t2", "1\n2"])
+def test_msg_id_list_rejects_ids_that_could_widen_the_operation(bad):
+    """A ';' in an id addresses messages the caller never picked.
+
+    These arrive from an HTTP body and delete is permanent, so a malformed id
+    is refused rather than quietly cleaned up.
+    """
+    with pytest.raises(SmsError, match="invalid message id"):
+        _msg_id_list([bad])
+
+
+@responses.activate
+def test_sms_mark_read_posts_the_captured_body(tmp_path):
+    install_sms([])
+    assert _client(tmp_path).sms_mark_read(["659", "658"]) == 2
+    body = _post_body()
+    assert "goformId=SET_MSG_READ" in body
+    assert "msg_id=659%3B658%3B" in body
+    assert "tag=0" in body
+
+
+@responses.activate
+def test_sms_mark_read_does_not_poll_a_status_slot(tmp_path):
+    """The device answers setSmsRead immediately; only send and delete poll."""
+    install_sms([])
+    _client(tmp_path).sms_mark_read(["659"])
+    polls = [c for c in responses.calls
+             if c.request.method == "GET" and "sms_cmd_status_info" in c.request.url]
+    assert polls == []
+
+
+@responses.activate
+def test_sms_mark_read_raises_when_the_router_rejects(tmp_path):
+    install_sms([], post_result="failure")
+    with pytest.raises(SmsError, match="mark as read"):
+        _client(tmp_path).sms_mark_read(["659"])
+
+
+@responses.activate
+def test_sms_delete_posts_the_captured_body(tmp_path):
+    install_sms([])
+    assert _client(tmp_path).sms_delete(["659", "658"], settle=0, interval=0) == 2
+    body = _post_body()
+    assert "goformId=DELETE_SMS" in body
+    assert "msg_id=659%3B658%3B" in body
+
+
+@responses.activate
+def test_sms_delete_polls_slot_six_not_the_send_slot(tmp_path):
+    install_sms([])
+    _client(tmp_path).sms_delete(["659"], settle=0, interval=0)
+    assert _query("sms_cmd_status_info")["sms_cmd"] == ["6"]
+
+
+@responses.activate
+def test_sms_delete_waits_out_the_idle_status(tmp_path):
+    install_sms([], statuses=(None, None, "3"))
+    _client(tmp_path).sms_delete(["659"], settle=0, interval=0)
+
+
+@responses.activate
+def test_sms_delete_raises_when_the_device_reports_failure(tmp_path):
+    install_sms([], statuses=("2",))
+    with pytest.raises(SmsError, match="rejected the delete"):
+        _client(tmp_path).sms_delete(["659"], settle=0, interval=0)
+
+
+@responses.activate
+def test_sms_delete_raises_when_the_router_rejects_the_post(tmp_path):
+    install_sms([], post_result="failure")
+    with pytest.raises(SmsError, match="delete"):
+        _client(tmp_path).sms_delete(["659"], settle=0, interval=0)
+
+
+@responses.activate
+def test_sms_delete_times_out_on_deadline(tmp_path):
+    install_sms([], statuses=(None,))
+    with pytest.raises(SmsError, match="timed out"):
+        _client(tmp_path).sms_delete(["659"], settle=0, timeout=0.05, interval=0)
+
+
+@responses.activate
+def test_sms_send_still_polls_its_own_slot(tmp_path):
+    """The shared poll must not have moved send onto the delete slot."""
+    install_sms([])
+    _client(tmp_path).sms_send("121", "Hi", settle=0, interval=0)
+    assert _query("sms_cmd_status_info")["sms_cmd"] == ["4"]

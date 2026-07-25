@@ -244,7 +244,9 @@ def sms_list_cmd(client: ZltClient, limit: int) -> None:
     for m in messages:
         mark = "*" if m.unread else " "
         who = f"to {m.number}" if m.outgoing else m.number
-        click.echo(f"{mark} {m.date}  {who}")
+        # The id leads the row because it is how 'sms read' and 'sms rm'
+        # address a message.
+        click.echo(f"{m.id:>5} {mark} {m.date}  {who}")
         # Bodies routinely carry newlines, so indent every line of them rather
         # than letting the second line start at column zero.
         for line in m.text.splitlines() or [""]:
@@ -263,6 +265,38 @@ def sms_send_cmd(client: ZltClient, number: str, text: str) -> None:
     except (LoginError, LockedOut, RouterUnreachable, SmsError) as exc:
         raise click.ClickException(str(exc))
     click.echo(f"Sent to {number}")
+
+
+@sms.command("read")
+@click.argument("ids", nargs=-1, required=True)
+@click.pass_obj
+def sms_read_cmd(client: ZltClient, ids: tuple[str, ...]) -> None:
+    """Mark messages read: zlt sms read 659 658.
+
+    Ids come from the first column of 'zlt sms list'. The device offers no way
+    back to unread.
+    """
+    try:
+        count = client.sms_mark_read(list(ids))
+    except (LoginError, LockedOut, RouterUnreachable, SmsError) as exc:
+        raise click.ClickException(str(exc))
+    click.echo(f"Marked {count} as read")
+
+
+@sms.command("rm")
+@click.argument("ids", nargs=-1, required=True)
+@click.pass_obj
+def sms_rm_cmd(client: ZltClient, ids: tuple[str, ...]) -> None:
+    """Delete messages permanently: zlt sms rm 659 658.
+
+    Ids come from the first column of 'zlt sms list'. There is no undo and no
+    prompt.
+    """
+    try:
+        count = client.sms_delete(list(ids))
+    except (LoginError, LockedOut, RouterUnreachable, SmsError) as exc:
+        raise click.ClickException(str(exc))
+    click.echo(f"Deleted {count}")
 
 
 @cli.command()
