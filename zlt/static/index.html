@@ -7,7 +7,12 @@
 <title>zlt · signal</title>
 <script>
   /* Set the theme before first paint: no flash of the wrong background.
-     Explicit choice wins; otherwise follow the OS. */
+     Explicit choice wins; otherwise follow the OS.
+
+     This is the one script that stays inline. Everything else is a file under
+     /static/js/, but this has to run before the first paint, and an external
+     file puts a round trip in front of that. The toggle half lives in
+     /static/js/theme.js. */
   (function () {
     var t = "light";
     try {
@@ -17,192 +22,7 @@
     document.documentElement.dataset.theme = t;
   })();
 </script>
-<style>
-  :root{
-    color-scheme:light;
-    --bg:#F7F8FA; --surface:#FFFFFF; --line:#E7EAEE; --line-soft:#F0F2F4; --trace:#DDE1E6;
-    --ink:#1A1D21; --muted:#6B7280; --faint:#9CA3AF;
-    --good:#16A34A; --fair:#D97706; --poor:#DC2626;
-    --q:var(--faint); /* live quality colour, set by JS */
-    --nums:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
-  }
-  :root[data-theme="dark"]{
-    color-scheme:dark;
-    --bg:#131519; --surface:#1A1D22; --line:#2A2F37; --line-soft:#22262D; --trace:#363C45;
-    --ink:#E9ECF0; --muted:#98A1AE; --faint:#69717E;
-    --good:#4ADE80; --fair:#FBBF24; --poor:#F87171;
-  }
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{
-    background:var(--bg); color:var(--ink);
-    font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-    font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
-    transition:background-color .2s, color .2s;
-  }
-  main{max-width:620px; margin:0 auto; padding:24px 22px 64px}
-  :focus-visible{outline:2px solid var(--ink); outline-offset:3px; border-radius:2px}
-
-  header{display:flex; align-items:center; gap:10px; margin-bottom:8px}
-  .wordmark{font-weight:600; font-size:15px}
-  .host{color:var(--faint); font-size:13px}
-  .session{margin-left:auto; display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted)}
-  .dot{width:7px; height:7px; border-radius:50%; background:var(--faint)}
-  .dot.on{background:var(--good)} .dot.off{background:var(--poor)}
-  .theme{
-    display:grid; place-items:center; width:30px; height:30px; padding:0;
-    background:none; border:1px solid var(--line); border-radius:50%;
-    color:var(--faint); cursor:pointer;
-  }
-  .theme:hover{color:var(--ink)}
-  .theme svg{display:block}
-  .theme .sun{display:none}
-  :root[data-theme="dark"] .theme .sun{display:block}
-  :root[data-theme="dark"] .theme .moon{display:none}
-
-  #banner{display:none; color:var(--poor); font-size:13px; margin:10px 0}
-  #banner.show{display:block}
-  #note{display:none; color:var(--faint); font-size:13px; margin:6px 0}
-  #note.show{display:block}
-
-  .hero{margin:38px 0 10px; text-align:center}
-  .hero .label{font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--faint)}
-  .hero .big{
-    font-size:clamp(72px,19vw,112px); font-weight:200; letter-spacing:-.03em;
-    line-height:1; margin:8px 0 4px; font-variant-numeric:tabular-nums;
-  }
-  .hero .big small{font-size:22px; font-weight:400; color:var(--faint); letter-spacing:0; margin-left:6px}
-  .hero .quality{font-size:15px; font-weight:500; color:var(--q); transition:color .5s}
-
-  .bar{height:3px; background:var(--line-soft); border-radius:2px; margin:30px 0 6px; overflow:hidden}
-  .bar i{display:block; height:100%; width:0%; background:var(--q); border-radius:2px;
-    transition:width .6s ease, background-color .5s}
-  .bar-ends{display:flex; justify-content:space-between; color:var(--faint); font-size:11px;
-    font-family:var(--nums); margin-bottom:38px}
-
-  section{margin-bottom:40px}
-  section h2{font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--faint);
-    font-weight:500; margin-bottom:14px}
-  .caption{float:right; letter-spacing:0; text-transform:none; font-size:12px; color:var(--faint)}
-
-  .seg{display:flex; gap:8px; flex-wrap:wrap}
-  .seg button{
-    font:inherit; font-size:14px; padding:8px 16px; cursor:pointer;
-    background:var(--surface); color:var(--muted);
-    border:1px solid var(--line); border-radius:999px;
-    transition:background-color .15s, color .15s, border-color .15s;
-  }
-  .seg button:hover:not(.active){color:var(--ink); border-color:var(--faint)}
-  .seg button.active{background:var(--ink); border-color:var(--ink); color:var(--bg); font-weight:500}
-  .seg button:disabled{opacity:.45; cursor:wait}
-  .modehint{font-size:13px; color:var(--faint); margin-top:10px; min-height:18px}
-
-  .spark-wrap{background:var(--surface); border:1px solid var(--line); border-radius:10px;
-    padding:16px 14px 10px}
-  svg#spark{display:block; width:100%; height:96px}
-
-  .readings{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:4px 18px}
-  .row{display:flex; justify-content:space-between; align-items:baseline;
-    padding:11px 0; border-bottom:1px solid var(--line-soft)}
-  .row:last-child{border-bottom:none}
-  .row .k{color:var(--muted); font-size:14px}
-  .row .v{font-family:var(--nums); font-size:14px}
-  .row .v:empty::after{content:"—"; color:var(--faint)}
-  #bigVal:empty::after{content:"···"; color:var(--faint)}
-
-  .sms-list{background:var(--surface); border:1px solid var(--line); border-radius:10px;
-    padding:4px 18px; margin-bottom:12px}
-  .sms-list:empty{display:none}
-  .sms-msg{padding:12px 0; border-bottom:1px solid var(--line-soft)}
-  .sms-msg:last-child{border-bottom:none}
-  .sms-head{display:flex; align-items:baseline; gap:8px; margin-bottom:4px}
-  .sms-from{font-size:14px; color:var(--ink)}
-  .sms-msg.unread .sms-from{font-weight:600}
-  .sms-when{font-family:var(--nums); font-size:12px; color:var(--faint); margin-left:auto;
-    flex-shrink:0}
-  .sms-dot{width:6px; height:6px; border-radius:50%; background:var(--q); flex-shrink:0}
-  .sms-body{font-size:14px; color:var(--muted); white-space:pre-wrap; word-break:break-word}
-  .sms-empty{font-size:13px; color:var(--faint); margin-bottom:12px}
-  .sms-badge{font-family:var(--nums)}
-  #sms-compose{flex-wrap:wrap}
-  #sms-text{flex:2 1 220px}
-
-  .speed-actions{display:flex; align-items:center; gap:12px; margin-top:12px}
-  .speed-actions .modehint{margin-top:0}
-  #speed-status.error, #sms-status.error{color:var(--poor)}
-  .readings .row .v.live{color:var(--muted)}
-
-  .ussd-saved-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px}
-  #ussd-saved:empty{display:none}
-  .ussd-link{
-    font:inherit; font-size:13px; padding:0; background:none; border:none;
-    color:var(--faint); cursor:pointer; text-decoration:underline;
-    text-underline-offset:3px; transition:color .15s;
-  }
-  .ussd-link:hover{color:var(--ink)}
-  .ussd-link:disabled{opacity:.45; cursor:wait}
-  .ussd-manage-card{
-    background:var(--surface); border:1px solid var(--line); border-radius:10px;
-    padding:14px 16px; margin-bottom:14px;
-  }
-  .ussd-manage-label{
-    font-size:12px; letter-spacing:.18em; text-transform:uppercase;
-    color:var(--faint); font-weight:500; margin-bottom:12px;
-  }
-  .ussd-manage-list:empty{display:none}
-  .ussd-manage-row{
-    display:flex; align-items:center; justify-content:space-between; gap:10px;
-    padding:11px 0; border-bottom:1px solid var(--line-soft);
-  }
-  .ussd-manage-row:last-child{border-bottom:none}
-  .ussd-manage-row .ussd-manage-meta{
-    display:flex; align-items:baseline; gap:8px; min-width:0; overflow:hidden;
-  }
-  .ussd-manage-row .lbl{
-    font-size:14px; color:var(--ink);
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  }
-  .ussd-manage-row .code{
-    font-family:var(--nums); font-size:12px; color:var(--faint); flex-shrink:0;
-  }
-  .ussd-x{
-    font:inherit; font-size:17px; line-height:1; cursor:pointer;
-    background:none; border:none; color:var(--faint);
-    padding:8px 10px; border-radius:6px; transition:color .15s, background-color .15s;
-  }
-  .ussd-x:hover{color:var(--poor); background:var(--line-soft)}
-  .ussd-x:disabled{opacity:.45; cursor:wait}
-  .ussd-row{display:flex; gap:8px; margin-bottom:10px}
-  .ussd-row[hidden]{display:none}
-  .ussd-input{
-    flex:1; min-width:0; font:inherit; font-size:14px; padding:8px 14px;
-    background:var(--surface); color:var(--ink);
-    border:1px solid var(--line); border-radius:8px;
-  }
-  .ussd-input::placeholder{color:var(--faint)}
-  .ussd-btn{
-    font:inherit; font-size:14px; padding:8px 16px; cursor:pointer;
-    background:var(--ink); color:var(--bg); border:1px solid var(--ink);
-    border-radius:8px; font-weight:500; transition:opacity .15s;
-  }
-  .ussd-btn:hover{opacity:.85}
-  .ussd-btn:disabled{opacity:.45; cursor:wait}
-  .ussd-btn-ghost{background:none; color:var(--muted); border:1px solid var(--line)}
-  .ussd-btn-ghost:hover{color:var(--poor); border-color:var(--poor); opacity:1}
-  .ussd-out{
-    background:var(--surface); border:1px solid var(--line); border-radius:10px;
-    padding:14px 16px; margin-bottom:10px; font-family:var(--nums); font-size:13px;
-    white-space:pre-wrap; word-break:break-word; color:var(--ink);
-  }
-  .ussd-out.error{color:var(--poor); border-color:var(--poor)}
-
-  footer{display:flex; align-items:center; gap:18px; color:var(--faint); font-size:13px}
-  footer button, footer select{
-    font:inherit; font-size:13px; background:none; border:none; color:var(--muted);
-    cursor:pointer; padding:2px 0; text-decoration:underline; text-underline-offset:3px;
-  }
-  footer select{text-decoration:none; border-bottom:1px solid var(--line)}
-  @media (prefers-reduced-motion: reduce){ *{transition:none !important} }
-</style>
+<link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
 <main>
@@ -225,90 +45,105 @@
   <div id="banner" role="alert"></div>
   <div id="note"></div>
 
-  <div class="hero">
-    <div class="label" id="bigLabel">RSRP</div>
-    <div class="big"><span id="bigVal"></span><small>dBm</small></div>
-    <div class="quality" id="qualityWord">loading&hellip;</div>
+  <!-- The meter and the tab bar are pinned together: whichever tool you are
+       using, the reading this dashboard exists to show stays on screen. -->
+  <div class="headbar" id="headbar">
+    <div class="hero">
+      <div class="label" id="bigLabel">RSRP</div>
+      <div class="big"><span id="bigVal"></span><small>dBm</small></div>
+      <div class="quality" id="qualityWord">loading&hellip;</div>
+    </div>
+
+    <div class="bar" aria-hidden="true"><i id="fill"></i></div>
+    <div class="bar-ends"><span id="barMin"></span><span id="barMax"></span></div>
+
+    <nav class="tabs" role="tablist" aria-label="Dashboard sections">
+      <button class="tab" id="tab-signal" role="tab" aria-controls="signal-panel"
+              aria-selected="true">Signal</button>
+      <button class="tab" id="tab-messages" role="tab" aria-controls="sms-panel"
+              aria-selected="false">Messages<span class="tab-badge" id="sms-badge"></span></button>
+      <button class="tab" id="tab-ussd" role="tab" aria-controls="ussd-panel"
+              aria-selected="false">USSD</button>
+      <button class="tab" id="tab-speed" role="tab" aria-controls="speed-panel"
+              aria-selected="false">Speed</button>
+    </nav>
   </div>
 
-  <div class="bar" aria-hidden="true"><i id="fill"></i></div>
-  <div class="bar-ends"><span id="barMin"></span><span id="barMax"></span></div>
+  <div id="signal-panel" role="tabpanel" aria-labelledby="tab-signal">
+    <section>
+      <h2>Network mode</h2>
+      <div class="seg" id="seg" role="group" aria-label="Network mode">
+        <button data-mode="auto">Auto</button>
+        <button data-mode="lte">4G</button>
+        <button data-mode="4g3g">4G/3G</button>
+        <button data-mode="wcdma">3G</button>
+        <button data-mode="gsm">2G</button>
+      </div>
+      <div class="hint" id="modehint"></div>
+    </section>
 
-  <section>
-    <h2>Network mode</h2>
-    <div class="seg" id="seg" role="group" aria-label="Network mode">
-      <button data-mode="auto">Auto</button>
-      <button data-mode="lte">4G</button>
-      <button data-mode="4g3g">4G/3G</button>
-      <button data-mode="wcdma">3G</button>
-      <button data-mode="gsm">2G</button>
-    </div>
-    <div class="modehint" id="modehint"></div>
-  </section>
+    <section>
+      <h2>Walk test <span class="caption" id="sparkCaption">last 15 min</span></h2>
+      <div class="card spark-wrap">
+        <svg id="spark" viewBox="0 0 800 96" preserveAspectRatio="none" aria-label="Signal history"></svg>
+      </div>
+    </section>
 
-  <section>
-    <h2>Walk test <span class="caption" id="sparkCaption">last 15 min</span></h2>
-    <div class="spark-wrap">
-      <svg id="spark" viewBox="0 0 800 96" preserveAspectRatio="none" aria-label="Signal history"></svg>
-    </div>
-  </section>
+    <section>
+      <h2>Readings</h2>
+      <div class="card rows" id="readings"></div>
+    </section>
+  </div>
 
-  <section>
-    <h2>Readings</h2>
-    <div class="readings" id="readings"></div>
-  </section>
-
-  <section id="sms-panel">
-    <h2>Messages <span class="caption sms-badge" id="sms-badge"></span></h2>
-    <div class="ussd-saved-row">
-      <button type="button" id="sms-refresh" class="ussd-link">Refresh</button>
+  <section id="sms-panel" role="tabpanel" aria-labelledby="tab-messages" hidden>
+    <div class="panel-actions">
+      <button type="button" id="sms-refresh" class="link-btn">Refresh</button>
     </div>
     <div class="sms-empty" id="sms-empty" hidden>no messages</div>
-    <div class="sms-list" id="sms-list"></div>
-    <form id="sms-compose" class="ussd-row">
-      <input id="sms-number" class="ussd-input" placeholder="Number" autocomplete="off">
-      <input id="sms-text" class="ussd-input" placeholder="Message" autocomplete="off">
-      <button type="submit" class="ussd-btn">Send</button>
+    <div class="card rows sms-list" id="sms-list"></div>
+    <form id="sms-compose" class="field-row">
+      <input id="sms-number" class="input" placeholder="Number" autocomplete="off">
+      <input id="sms-text" class="input" placeholder="Message" autocomplete="off">
+      <button type="submit" class="btn">Send</button>
     </form>
-    <div id="sms-status" class="modehint"></div>
+    <div id="sms-status" class="hint"></div>
   </section>
 
-  <section id="speed-panel">
-    <h2>Speed test <span class="caption" id="speed-caption">not run yet</span></h2>
-    <div class="readings" id="speed-results"></div>
-    <div class="speed-actions">
-      <button type="button" id="speed-run" class="ussd-btn">Run test</button>
-      <span class="modehint" id="speed-status"></span>
-    </div>
-  </section>
-
-  <section id="ussd-panel">
-    <h2>USSD</h2>
-    <div class="ussd-saved-row">
+  <section id="ussd-panel" role="tabpanel" aria-labelledby="tab-ussd" hidden>
+    <div class="panel-actions">
       <div class="seg" id="ussd-saved"></div>
-      <button type="button" id="ussd-manage" class="ussd-link">Manage</button>
+      <button type="button" id="ussd-manage" class="link-btn">Manage</button>
     </div>
-    <div id="ussd-manage-card" class="ussd-manage-card" hidden>
+    <div id="ussd-manage-card" class="card pad ussd-manage-card" hidden>
       <div class="ussd-manage-label">Manage saved codes</div>
       <div id="ussd-manage-list" class="ussd-manage-list"></div>
-      <form id="ussd-save-form" class="ussd-row">
-        <input id="ussd-save-label" class="ussd-input" placeholder="Label" autocomplete="off">
-        <input id="ussd-save-code" class="ussd-input" placeholder="*310#" autocomplete="off">
-        <button type="submit" class="ussd-btn">Add</button>
+      <form id="ussd-save-form" class="field-row">
+        <input id="ussd-save-label" class="input" placeholder="Label" autocomplete="off">
+        <input id="ussd-save-code" class="input" placeholder="*310#" autocomplete="off">
+        <button type="submit" class="btn">Add</button>
       </form>
-      <div id="ussd-manage-msg" class="modehint" hidden></div>
+      <div id="ussd-manage-msg" class="hint" hidden></div>
     </div>
-    <form id="ussd-form" class="ussd-row">
-      <input id="ussd-code" class="ussd-input" placeholder="*310#" autocomplete="off">
-      <button type="submit" class="ussd-btn">Send</button>
+    <form id="ussd-form" class="field-row">
+      <input id="ussd-code" class="input" placeholder="*310#" autocomplete="off">
+      <button type="submit" class="btn">Send</button>
     </form>
-    <pre id="ussd-out" class="ussd-out" hidden></pre>
-    <form id="ussd-reply-form" class="ussd-row" hidden>
-      <input id="ussd-reply" class="ussd-input" placeholder="reply" autocomplete="off">
-      <button type="submit" class="ussd-btn">Reply</button>
-      <button type="button" id="ussd-cancel" class="ussd-btn ussd-btn-ghost">Cancel</button>
+    <pre id="ussd-out" class="card ussd-out" hidden></pre>
+    <form id="ussd-reply-form" class="field-row" hidden>
+      <input id="ussd-reply" class="input" placeholder="reply" autocomplete="off">
+      <button type="submit" class="btn">Reply</button>
+      <button type="button" id="ussd-cancel" class="btn btn-ghost">Cancel</button>
     </form>
-    <div id="ussd-spinner" class="modehint" hidden>sending&hellip;</div>
+    <div id="ussd-spinner" class="hint" hidden>sending&hellip;</div>
+  </section>
+
+  <section id="speed-panel" role="tabpanel" aria-labelledby="tab-speed" hidden>
+    <div class="card rows" id="speed-results"></div>
+    <div class="speed-actions">
+      <button type="button" id="speed-run" class="btn">Run test</button>
+      <span class="hint" id="speed-status"></span>
+      <span class="hint" id="speed-caption">not run yet</span>
+    </div>
   </section>
 
   <footer>
@@ -324,659 +159,16 @@
   </footer>
 </main>
 
-<script>
-"use strict";
-const $ = id => document.getElementById(id);
-
-/* --- theme ---------------------------------------------------------------- */
-const root = document.documentElement;
-function applyTheme(t){
-  root.dataset.theme = t;
-  $('theme').setAttribute('aria-label',
-    t === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
-}
-applyTheme(root.dataset.theme);
-$('theme').addEventListener('click', () => {
-  const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
-  applyTheme(next);
-  try { localStorage.setItem('zlt-theme', next); } catch (e) {}
-});
-/* Keep following the OS until an explicit choice has been made. */
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
-  let saved = null;
-  try { saved = localStorage.getItem('zlt-theme'); } catch (err) {}
-  if (!saved) applyTheme(e.matches ? 'dark' : 'light');
-});
-
-/* --- signal quality ------------------------------------------------------- */
-const METRIC = {
-  rsrp: { min:-125, max:-70, fair:-100, good:-90, excellent:-80 },
-  rssi: { min:-100, max:-45, fair:-75,  good:-65, excellent:-55 },
-};
-function quality(kind, v){
-  const m = METRIC[kind];
-  if (v >= m.excellent) return ['excellent', 'var(--good)'];
-  if (v >= m.good)      return ['good',      'var(--good)'];
-  if (v >= m.fair)      return ['fair',      'var(--fair)'];
-  return ['poor', 'var(--poor)'];
-}
-
-/* --- walk-test history ---------------------------------------------------- */
-const HIST_MS = 15*60*1000;
-const hist = [];
-function pushHist(rsrp, rssi){
-  const now = Date.now();
-  hist.push({t:now, rsrp, rssi});
-  while (hist.length && now - hist[0].t > HIST_MS) hist.shift();
-}
-function drawSpark(){
-  const svg = $('spark');
-  if (hist.length < 2){ svg.innerHTML = ''; return; }
-  const t0 = hist[0].t, span = Math.max(hist[hist.length-1].t - t0, 1);
-  const y = v => 92 - (Math.min(Math.max(v,-120),-45) + 120) / 75 * 88;
-  /* var() must go through style=, not a presentation attribute. */
-  const line = (key, cssVar, w) => {
-    const pts = hist.filter(h => h[key] != null)
-      .map(h => `${((h.t-t0)/span*800).toFixed(1)},${y(h[key]).toFixed(1)}`);
-    return pts.length > 1
-      ? `<polyline points="${pts.join(' ')}" fill="none" style="stroke:${cssVar}"
-          stroke-width="${w}" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>` : '';
-  };
-  svg.innerHTML = line('rssi','var(--trace)',1.2) + line('rsrp','var(--q)',1.8);
-  $('sparkCaption').textContent = hist.some(h => h.rsrp != null)
-    ? 'rsrp · rssi in grey · last 15 min' : 'rssi · last 15 min';
-}
-
-/* --- readings list -------------------------------------------------------- */
-const ROWS = [
-  ['network_type','Network'], ['lte_band','Band'], ['signalbar','Bars (of 5)'],
-  ['lte_snr','SNR (dB)'], ['lte_rsrq','RSRQ (dB)'], ['rssi','RSSI (dBm)'],
-  ['lte_pci','Cell PCI'], ['ppp_status','Connection'],
-];
-function drawReadings(d){
-  $('readings').innerHTML = ROWS.map(([k,label]) =>
-    `<div class="row"><span class="k">${label}</span><span class="v">${d[k] ?? ''}</span></div>`
-  ).join('');
-}
-
-/* --- status polling ------------------------------------------------------- */
-let timer = null, paused = false, pollBusy = false;
-let pollFails = 0, everLoaded = false;
-const POLL_FAIL_THRESHOLD = 2;
-async function poll(){
-  if (pollBusy) return;
-  pollBusy = true;
-  try {
-    const r = await fetch('/api/status');
-    if (!r.ok) throw new Error((await r.json().catch(()=>({}))).detail || `HTTP ${r.status}`);
-    const s = await r.json();
-    $('banner').classList.remove('show');
-    pollFails = 0;
-    everLoaded = true;
-    $('host').textContent = s.host.replace(/^https?:\/\//,'');
-    $('dot').className = 'dot ' + (s.authed ? 'on' : 'off');
-    $('sessionWord').textContent = s.authed ? 'logged in' : 'open data';
-    if (s.note){ $('note').textContent = s.note; $('note').classList.add('show'); }
-    else $('note').classList.remove('show');
-
-    const d = s.data;
-    const num = x => (x !== '' && x != null && !isNaN(Number(x))) ? Number(x) : null;
-    const rsrp = num(d.lte_rsrp), rssi = num(d.rssi);
-    const kind = rsrp != null ? 'rsrp' : 'rssi';
-    const val  = rsrp != null ? rsrp : rssi;
-    const m = METRIC[kind];
-    $('bigLabel').textContent = kind.toUpperCase();
-    $('barMin').textContent = m.min; $('barMax').textContent = m.max;
-    if (val != null){
-      const [word, color] = quality(kind, val);
-      root.style.setProperty('--q', color);
-      $('bigVal').textContent = val;
-      $('qualityWord').textContent = word;
-      $('fill').style.width =
-        ((Math.min(Math.max(val,m.min),m.max) - m.min) / (m.max - m.min) * 100) + '%';
-    } else {
-      root.style.setProperty('--q', 'var(--faint)');
-      $('bigVal').textContent = '—';
-      $('qualityWord').textContent = 'no reading';
-      $('fill').style.width = '0%';
-    }
-    pushHist(rsrp, rssi);
-    drawSpark();
-    drawReadings(d);
-    $('stamp').textContent = 'updated ' + new Date().toLocaleTimeString();
-  } catch (e) {
-    pollFails++;
-    if (pollFails >= POLL_FAIL_THRESHOLD) {
-      if (everLoaded) {
-        $('banner').textContent = 'status: ' + e.message;
-        $('banner').classList.add('show');
-      } else {
-        $('qualityWord').textContent = 'connection issue';
-      }
-    }
-  } finally {
-    pollBusy = false;
-  }
-}
-function schedule(){
-  clearInterval(timer);
-  if (!paused) timer = setInterval(poll, Number($('interval').value));
-}
-$('interval').addEventListener('change', schedule);
-$('pause').addEventListener('click', () => {
-  paused = !paused;
-  $('pause').textContent = paused ? 'Resume' : 'Pause';
-  schedule();
-  if (!paused) poll();
-});
-
-/* --- network mode --------------------------------------------------------- */
-let modeBusy = false;
-const segButtons = () => document.querySelectorAll('#seg button');
-function markMode(friendly){
-  segButtons().forEach(b => b.classList.toggle('active', b.dataset.mode === friendly));
-}
-async function loadMode(){
-  try {
-    const r = await fetch('/api/net');
-    if (!r.ok) throw new Error((await r.json().catch(()=>({}))).detail || `HTTP ${r.status}`);
-    const j = await r.json();
-    markMode(j.friendly);
-    $('modehint').textContent = j.configured ? `router reports ${j.configured}` : '';
-  } catch (e) {
-    $('modehint').textContent = 'mode: ' + e.message;
-  }
-}
-segButtons().forEach(btn => {
-  btn.addEventListener('click', async () => {
-    if (modeBusy) return;
-    modeBusy = true;
-    segButtons().forEach(b => b.disabled = true);
-    $('modehint').textContent = 'setting ' + btn.textContent + '…';
-    try {
-      const r = await fetch('/api/net', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({mode: btn.dataset.mode}),
-      });
-      const j = await r.json().catch(()=>({}));
-      if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
-      markMode(j.friendly);
-      $('modehint').textContent = `set — router reports ${j.configured || 'unknown'}`;
-    } catch (e) {
-      $('modehint').textContent = 'set failed: ' + e.message;
-      loadMode();
-    } finally {
-      modeBusy = false;
-      segButtons().forEach(b => b.disabled = false);
-    }
-  });
-});
-
-drawReadings({});
-poll(); loadMode(); schedule();
-</script>
-
-<script>
-(function () {
-  "use strict";
-  const panel = document.getElementById('ussd-panel');
-  const out = document.getElementById('ussd-out');
-  const sendForm = document.getElementById('ussd-form');
-  const codeInput = document.getElementById('ussd-code');
-  const replyForm = document.getElementById('ussd-reply-form');
-  const replyInput = document.getElementById('ussd-reply');
-  const spinner = document.getElementById('ussd-spinner');
-  const savedBox = document.getElementById('ussd-saved');
-  const manageBtn = document.getElementById('ussd-manage');
-  const manageCard = document.getElementById('ussd-manage-card');
-  const manageList = document.getElementById('ussd-manage-list');
-  const saveForm = document.getElementById('ussd-save-form');
-  const saveLabel = document.getElementById('ussd-save-label');
-  const saveCode = document.getElementById('ussd-save-code');
-  const manageMsg = document.getElementById('ussd-manage-msg');
-
-  let busy = false;
-  function setBusy(state) {
-    panel.querySelectorAll('button').forEach(b => b.disabled = state);
-  }
-
-  /* show() is contracted for the {text, state} shape that send/reply return.
-     The cancel endpoint returns {ok: true} instead, so cancel must never be
-     routed through here - see the dedicated onCancelled() handler below. */
-  function show(result) {
-    out.hidden = false;
-    out.classList.toggle('error', result.state === 'error' || result.state === 'timeout');
-    out.textContent = result.state === 'timeout'
-      ? '(no response from network)'
-      : (result.state === 'error' ? 'USSD error: ' + result.text : result.text);
-    replyForm.hidden = result.state !== 'prompt';
-  }
-
-  function onCancelled() {
-    out.hidden = false;
-    out.classList.remove('error');
-    out.textContent = 'cancelled';
-    replyForm.hidden = true;
-  }
-
-  /* onResult, when given, replaces the default show() handling of a
-     successful response - used by cancel, whose {ok} payload does not match
-     show()'s {text, state} contract. Failures still go through show(), since
-     {state: 'error', text} always matches that contract. */
-  async function call(url, payload, onResult) {
-    if (busy) return;
-    busy = true;
-    setBusy(true);
-    spinner.hidden = false;
-    try {
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: payload ? JSON.stringify(payload) : undefined,
-      });
-      if (!r.ok) { show({ state: 'error', text: 'request failed (' + r.status + ')' }); return; }
-      const data = await r.json();
-      (onResult || show)(data);
-    } catch (e) {
-      show({ state: 'error', text: String(e) });
-    } finally {
-      spinner.hidden = true;
-      setBusy(false);
-      busy = false;
-    }
-  }
-
-  /* Saved-code management is deliberately kept off the call()/show() path:
-     these endpoints return {codes}, not the {text, state} shape show() is
-     contracted for, and a failure to save should not overwrite a USSD reply. */
-  let saved = [];
-  let managing = false;
-
-  function note(msg) {
-    manageMsg.hidden = !msg;
-    manageMsg.textContent = msg || '';
-  }
-
-  function renderSaved() {
-    savedBox.innerHTML = '';
-    manageList.innerHTML = '';
-    if (!managing) {
-      for (const c of saved) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.textContent = c.label;
-        b.title = c.code;
-        b.onclick = () => call('/api/ussd/send', { code: c.code });
-        savedBox.appendChild(b);
-      }
-      return;
-    }
-    for (const c of saved) {
-      const row = document.createElement('div');
-      row.className = 'ussd-manage-row';
-      const meta = document.createElement('span');
-      meta.className = 'ussd-manage-meta';
-      const lbl = document.createElement('span');
-      lbl.className = 'lbl';
-      lbl.textContent = c.label;
-      const code = document.createElement('span');
-      code.className = 'code';
-      code.textContent = c.code;
-      meta.append(lbl, code);
-      const x = document.createElement('button');
-      x.type = 'button';
-      x.className = 'ussd-x';
-      x.textContent = '×';
-      x.setAttribute('aria-label', 'Remove ' + c.label);
-      x.onclick = () => store('DELETE', { label: c.label });
-      row.append(meta, x);
-      manageList.appendChild(row);
-    }
-  }
-
-  async function store(method, body) {
-    if (busy) return;
-    busy = true;
-    setBusy(true);
-    try {
-      const r = await fetch('/api/ussd/codes', {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!r.ok) {
-        const detail = await r.json().catch(() => ({}));
-        note(detail.detail || 'could not save (' + r.status + ')');
-        return;
-      }
-      saved = (await r.json()).codes;
-      note('');
-      renderSaved();
-    } catch (e) {
-      note(String(e));
-    } finally {
-      setBusy(false);
-      busy = false;
-    }
-  }
-
-  async function loadSaved() {
-    try {
-      const r = await fetch('/api/ussd/codes');
-      saved = (await r.json()).codes;
-    } catch (e) {
-      saved = [];
-    }
-    renderSaved();
-  }
-
-  sendForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const code = codeInput.value.trim();
-    if (code) call('/api/ussd/send', { code });
-  });
-  replyForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const text = replyInput.value.trim();
-    if (!text) return;
-    call('/api/ussd/reply', { text });
-    replyInput.value = '';
-  });
-  document.getElementById('ussd-cancel').addEventListener('click', () => {
-    replyForm.hidden = true;
-    call('/api/ussd/cancel', null, onCancelled).then(loadSaved);
-  });
-
-  /* Manage mode keeps the default row clean: saved codes are plain one-click
-     send buttons until you opt in, so a remove control is never sitting next
-     to a button you meant to press. */
-  manageBtn.addEventListener('click', () => {
-    managing = !managing;
-    manageBtn.textContent = managing ? 'Done' : 'Manage';
-    manageCard.hidden = !managing;
-    note('');
-    if (managing && !saveCode.value) saveCode.value = codeInput.value.trim();
-    renderSaved();
-    if (managing) saveLabel.focus();
-  });
-
-  saveForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const label = saveLabel.value.trim();
-    const code = saveCode.value.trim();
-    if (!label || !code) { note('Both a label and a code are required.'); return; }
-    store('POST', { label, code }).then(() => {
-      if (!manageMsg.textContent) { saveLabel.value = ''; saveCode.value = ''; saveLabel.focus(); }
-    });
-  });
-
-  loadSaved();
-})();
-</script>
-
-<script>
-/* Messages.
-
-   Every row is built with createElement/textContent rather than innerHTML.
-   The sender and body of an SMS arrive off the mobile network, which makes
-   them the one thing on this page a stranger gets to write.
-
-   The inbox is loaded on open and after a send, not on the status poll: a
-   read holds the same router lock the signal poll needs, and the device is
-   slow enough that polling both would make the panel fight itself. Refresh is
-   an explicit button instead. */
-(function () {
-  "use strict";
-  const panel = document.getElementById('sms-panel');
-  const listEl = document.getElementById('sms-list');
-  const emptyEl = document.getElementById('sms-empty');
-  const badgeEl = document.getElementById('sms-badge');
-  const statusEl = document.getElementById('sms-status');
-  const form = document.getElementById('sms-compose');
-  const numberInput = document.getElementById('sms-number');
-  const textInput = document.getElementById('sms-text');
-  const refreshBtn = document.getElementById('sms-refresh');
-
-  let busy = false;
-  function setBusy(state) {
-    busy = state;
-    panel.querySelectorAll('button').forEach(b => b.disabled = state);
-  }
-
-  function say(msg, isError) {
-    statusEl.textContent = msg || '';
-    statusEl.classList.toggle('error', !!isError);
-  }
-
-  function render(messages, unread) {
-    listEl.innerHTML = '';
-    emptyEl.hidden = messages.length > 0;
-    badgeEl.textContent = unread ? unread + ' unread' : '';
-    for (const m of messages) {
-      const row = document.createElement('div');
-      row.className = m.unread ? 'sms-msg unread' : 'sms-msg';
-
-      const head = document.createElement('div');
-      head.className = 'sms-head';
-      if (m.unread) {
-        const dot = document.createElement('span');
-        dot.className = 'sms-dot';
-        head.appendChild(dot);
-      }
-      const from = document.createElement('span');
-      from.className = 'sms-from';
-      from.textContent = m.outgoing ? 'to ' + m.number : m.number;
-      const when = document.createElement('span');
-      when.className = 'sms-when';
-      when.textContent = m.date;
-      head.append(from, when);
-
-      const body = document.createElement('div');
-      body.className = 'sms-body';
-      body.textContent = m.text;
-
-      row.append(head, body);
-      listEl.appendChild(row);
-    }
-  }
-
-  async function load() {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const r = await fetch('/api/sms');
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.detail || 'HTTP ' + r.status);
-      render(data.messages, data.unread);
-      say('');
-    } catch (e) {
-      say('inbox: ' + (e.message || e), true);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (busy) return;
-    const number = numberInput.value.trim();
-    const text = textInput.value.trim();
-    if (!number || !text) {
-      say('A number and a message are both required.', true);
-      return;
-    }
-    setBusy(true);
-    say('sending…');
-    try {
-      const r = await fetch('/api/sms/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ number: number, text: text }),
-      });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.detail || 'HTTP ' + r.status);
-      textInput.value = '';
-      say('sent');
-    } catch (e) {
-      say('send failed: ' + (e.message || e), true);
-    } finally {
-      setBusy(false);
-    }
-    load();
-  });
-
-  refreshBtn.addEventListener('click', load);
-  load();
-})();
-</script>
-
-<script>
-/* Speed test.
-
-   The transfer runs browser-to-target with no backend in the middle: proxying
-   it through the dashboard would measure the serving machine's link instead of
-   this one's, and push every byte over the 4G link twice. The backend only
-   says where to aim (/api/speedtest/config).
-
-   Both directions are time-boxed rather than fixed-size, because the same
-   payload that takes 2s on a good LTE cell takes minutes on a bad one. The
-   download streams and stops reading at the cap; the upload cannot be measured
-   mid-flight, so it sizes the real run from a small probe. */
-(function () {
-  "use strict";
-  const runBtn = document.getElementById('speed-run');
-  const statusEl = document.getElementById('speed-status');
-  const resultsEl = document.getElementById('speed-results');
-  const captionEl = document.getElementById('speed-caption');
-
-  const ROWS = [['down', 'Download (Mbps)'], ['up', 'Upload (Mbps)'], ['ping', 'Ping (ms)']];
-  const TARGET_SECONDS = 5;      // aim each phase at roughly this long
-  const DOWN_CAP_SECONDS = 8;    // hard stop for the download stream
-  const UP_PROBE_BYTES = 512 * 1024;
-  const PING_SAMPLES = 4;
-
-  const result = { down: null, up: null, ping: null };
-  const mbps = (bytes, seconds) => seconds > 0 ? bytes * 8 / seconds / 1e6 : 0;
-  const round1 = n => Math.round(n * 10) / 10;
-  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-  const sized = (url, bytes) =>
-    url + (url.includes('?') ? '&' : '?') + 'bytes=' + bytes;
-
-  function render(liveKey, liveValue) {
-    resultsEl.innerHTML = ROWS.map(([k, label]) => {
-      const live = k === liveKey && liveValue != null;
-      const v = live ? liveValue : result[k];
-      return `<div class="row"><span class="k">${label}</span>` +
-             `<span class="${live ? 'v live' : 'v'}">${v == null ? '' : v}</span></div>`;
-    }).join('');
-  }
-
-  function say(msg, isError) {
-    statusEl.textContent = msg || '';
-    statusEl.classList.toggle('error', !!isError);
-  }
-
-  let cfg = null;
-  async function config() {
-    if (cfg) return cfg;
-    const r = await fetch('/api/speedtest/config');
-    if (!r.ok) throw new Error('speed test unavailable (' + r.status + ')');
-    cfg = await r.json();
-    return cfg;
-  }
-
-  async function measurePing(c) {
-    const url = sized(c.down_url, 0);
-    const samples = [];
-    for (let i = 0; i < PING_SAMPLES; i++) {
-      const started = performance.now();
-      const resp = await fetch(url, { cache: 'no-store' });
-      if (!resp.ok) throw new Error('ping failed (' + resp.status + ')');
-      await resp.arrayBuffer();
-      samples.push(performance.now() - started);
-    }
-    /* Best of N: the floor is the honest round trip, the rest is jitter. */
-    return Math.round(Math.min.apply(null, samples));
-  }
-
-  async function measureDown(c) {
-    const started = performance.now();
-    const resp = await fetch(sized(c.down_url, c.down_bytes), { cache: 'no-store' });
-    if (!resp.ok) throw new Error('download failed (' + resp.status + ')');
-    const elapsed = () => (performance.now() - started) / 1000;
-
-    if (!resp.body || !resp.body.getReader) {
-      const buf = await resp.arrayBuffer();       /* no streaming: time the lot */
-      return round1(mbps(buf.byteLength, elapsed()));
-    }
-    const reader = resp.body.getReader();
-    let got = 0, painted = 0;
-    for (;;) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      got += chunk.value.length;
-      const now = performance.now();
-      if (elapsed() >= DOWN_CAP_SECONDS) {
-        reader.cancel().catch(() => {});          /* enough to measure with */
-        break;
-      }
-      if (now - painted > 200) {                  /* keep the number moving */
-        painted = now;
-        render('down', round1(mbps(got, elapsed())));
-      }
-    }
-    return round1(mbps(got, elapsed()));
-  }
-
-  async function postBytes(url, bytes) {
-    const started = performance.now();
-    const resp = await fetch(url, {
-      method: 'POST', body: new Uint8Array(bytes), cache: 'no-store',
-    });
-    if (!resp.ok) throw new Error('upload failed (' + resp.status + ')');
-    await resp.arrayBuffer();
-    const seconds = (performance.now() - started) / 1000;
-    return { bytes, seconds, rate: seconds > 0 ? bytes / seconds : 0 };
-  }
-
-  async function measureUp(c) {
-    const floor = Math.min(UP_PROBE_BYTES, c.up_bytes);
-    const probe = await postBytes(c.up_url, floor);
-    const size = clamp(Math.round(probe.rate * TARGET_SECONDS), floor, c.up_bytes);
-    const run = await postBytes(c.up_url, size);
-    return round1(mbps(run.bytes, run.seconds));
-  }
-
-  let running = false;
-  runBtn.addEventListener('click', async () => {
-    if (running) return;
-    running = true;
-    runBtn.disabled = true;
-    result.down = result.up = result.ping = null;
-    render();
-    try {
-      const c = await config();
-      say('measuring latency…');
-      result.ping = await measurePing(c);
-      render();
-      say('downloading…');
-      result.down = await measureDown(c);
-      render();
-      say('uploading…');
-      result.up = await measureUp(c);
-      render();
-      say('');
-      captionEl.textContent = new Date().toLocaleTimeString();
-    } catch (e) {
-      say(e.message || String(e), true);
-    } finally {
-      running = false;
-      runBtn.disabled = false;
-    }
-  });
-
-  render();
-})();
-</script>
+<!-- Order matters: shared helpers, then the tab registry, then the panels that
+     register with it. Plain deferred scripts sharing one window.zlt namespace,
+     so there is still nothing to build and nothing to fetch off-origin. -->
+<script defer src="/static/js/shared.js"></script>
+<script defer src="/static/js/theme.js"></script>
+<script defer src="/static/js/tabs.js"></script>
+<script defer src="/static/js/signal.js"></script>
+<script defer src="/static/js/net.js"></script>
+<script defer src="/static/js/sms.js"></script>
+<script defer src="/static/js/ussd.js"></script>
+<script defer src="/static/js/speed.js"></script>
 </body>
 </html>

@@ -110,25 +110,91 @@ def test_index_serves_dashboard():
     assert "Walk test" in r.text
 
 
+def test_index_has_tab_bar():
+    """The four panels and the tabs that reach them.
+
+    Each tab points at its panel through aria-controls, which is also how
+    tabs.js finds panels, so asserting the pair keeps the wiring honest.
+    """
+    r = make(StubClient()).get("/")
+    assert r.status_code == 200
+    for tab, panel in [
+        ("tab-signal", "signal-panel"),
+        ("tab-messages", "sms-panel"),
+        ("tab-ussd", "ussd-panel"),
+        ("tab-speed", "speed-panel"),
+    ]:
+        assert f'id="{tab}"' in r.text
+        assert f'aria-controls="{panel}"' in r.text
+        assert f'id="{panel}"' in r.text
+
+
 def test_index_has_ussd_panel():
     r = make(StubClient()).get("/")
     assert r.status_code == 200
     assert 'id="ussd-panel"' in r.text
-    assert "/api/ussd/send" in r.text
 
 
 def test_index_has_speed_panel():
     r = make(StubClient()).get("/")
     assert r.status_code == 200
     assert 'id="speed-panel"' in r.text
-    assert "/api/speedtest/config" in r.text
 
 
 def test_index_has_sms_panel():
     r = make(StubClient()).get("/")
     assert r.status_code == 200
     assert 'id="sms-panel"' in r.text
-    assert "/api/sms/send" in r.text
+
+
+# The panel scripts live under /static/js/ now, so the assertions that used to
+# look for endpoint URLs in the served HTML follow them there.
+def test_static_scripts_call_their_endpoints():
+    client = make(StubClient())
+    for name, endpoint in [
+        ("ussd.js", "/api/ussd/send"),
+        ("speed.js", "/api/speedtest/config"),
+        ("sms.js", "/api/sms/send"),
+        ("net.js", "/api/net"),
+        ("signal.js", "/api/status"),
+    ]:
+        r = client.get(f"/static/js/{name}")
+        assert r.status_code == 200, name
+        assert endpoint in r.text, name
+
+
+def test_static_css_is_served():
+    r = make(StubClient()).get("/static/app.css")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/css")
+    assert "--bg:" in r.text
+
+
+def test_static_assets_are_packaged():
+    """A missing package-data glob ships a dashboard with no styles.
+
+    The dev checkout keeps working either way, because the files are right
+    there on disk, so nothing but this test catches it before a pipx install
+    serves an unstyled page.
+    """
+    import tomllib
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    data = tomllib.loads((root / "pyproject.toml").read_text())
+    globs = data["tool"]["setuptools"]["package-data"]["zlt"]
+
+    assert "static/*.html" in globs
+    assert "static/*.css" in globs
+    assert "static/js/*.js" in globs
+
+    # Every asset index.html asks for has to be matched by one of those globs.
+    static = root / "zlt" / "static"
+    shipped = {p.relative_to(static).as_posix() for g in globs for p in static.glob(g[len("static/"):])}
+    for asset in ["index.html", "app.css"]:
+        assert asset in shipped
+    for script in (static / "js").glob("*.js"):
+        assert f"js/{script.name}" in shipped
 
 
 def test_web_deps_are_not_optional():

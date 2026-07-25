@@ -1,0 +1,253 @@
+/* zlt dashboard styles.
+
+   Served from the local origin alongside index.html, never a CDN: the router
+   LAN is sometimes the only network there is. */
+
+:root{
+  color-scheme:light;
+  --bg:#F7F8FA; --surface:#FFFFFF; --line:#E7EAEE; --line-soft:#F0F2F4; --trace:#DDE1E6;
+  --ink:#1A1D21; --muted:#6B7280; --faint:#9CA3AF;
+  --good:#16A34A; --fair:#D97706; --poor:#DC2626;
+  --q:var(--faint); /* live quality colour, set by JS */
+  --nums:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#131519; --surface:#1A1D22; --line:#2A2F37; --line-soft:#22262D; --trace:#363C45;
+  --ink:#E9ECF0; --muted:#98A1AE; --faint:#69717E;
+  --good:#4ADE80; --fair:#FBBF24; --poor:#F87171;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
+  transition:background-color .2s, color .2s;
+}
+main{max-width:620px; margin:0 auto; padding:24px 22px 64px}
+:focus-visible{outline:2px solid var(--ink); outline-offset:3px; border-radius:2px}
+
+/* --- header ---------------------------------------------------------------- */
+header{display:flex; align-items:center; gap:10px; margin-bottom:8px}
+.wordmark{font-weight:600; font-size:15px}
+.host{color:var(--faint); font-size:13px}
+.session{margin-left:auto; display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted)}
+.dot{width:7px; height:7px; border-radius:50%; background:var(--faint)}
+.dot.on{background:var(--good)} .dot.off{background:var(--poor)}
+.theme{
+  display:grid; place-items:center; width:30px; height:30px; padding:0;
+  background:none; border:1px solid var(--line); border-radius:50%;
+  color:var(--faint); cursor:pointer;
+}
+.theme:hover{color:var(--ink)}
+.theme svg{display:block}
+.theme .sun{display:none}
+:root[data-theme="dark"] .theme .sun{display:block}
+:root[data-theme="dark"] .theme .moon{display:none}
+
+#banner{display:none; color:var(--poor); font-size:13px; margin:10px 0}
+#banner.show{display:block}
+#note{display:none; color:var(--faint); font-size:13px; margin:6px 0}
+#note.show{display:block}
+
+/* --- the pinned meter ------------------------------------------------------
+   Meter, range bar and tab bar ride together in one sticky block, so the
+   reading the dashboard exists to show never scrolls away behind a long inbox.
+   Left at full size that block would eat a third of a phone screen, so it
+   collapses to a single line once the page is scrolled at all - see the
+   .compact rules and the scroll handler in signal.js. */
+.headbar{
+  position:sticky; top:0; z-index:5; background:var(--bg);
+  padding-top:6px; margin-top:-6px;
+}
+.headbar::after{
+  content:""; display:block; height:1px; background:var(--line);
+  opacity:0; transition:opacity .2s;
+}
+.headbar.compact::after{opacity:1}
+
+.hero{margin:38px 0 10px; text-align:center}
+.hero .label{font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--faint)}
+.hero .big{
+  font-size:clamp(72px,19vw,112px); font-weight:200; letter-spacing:-.03em;
+  line-height:1; margin:8px 0 4px; font-variant-numeric:tabular-nums;
+  transition:font-size .2s;
+}
+.hero .big small{font-size:22px; font-weight:400; color:var(--faint); letter-spacing:0; margin-left:6px}
+.hero .quality{font-size:15px; font-weight:500; color:var(--q); transition:color .5s}
+
+.bar{height:3px; background:var(--line-soft); border-radius:2px; margin:30px 0 6px; overflow:hidden}
+.bar i{display:block; height:100%; width:0%; background:var(--q); border-radius:2px;
+  transition:width .6s ease, background-color .5s}
+.bar-ends{display:flex; justify-content:space-between; color:var(--faint); font-size:11px;
+  font-family:var(--nums); margin-bottom:20px}
+
+.headbar.compact .hero{
+  display:flex; align-items:baseline; gap:10px; text-align:left; margin:2px 0 0;
+}
+.headbar.compact .hero .big{font-size:28px; margin:0}
+.headbar.compact .hero .big small{font-size:13px; margin-left:3px}
+.headbar.compact .hero .label{order:-1}
+.headbar.compact .hero .quality{margin-left:auto}
+.headbar.compact .bar{margin:8px 0 0}
+.headbar.compact .bar-ends{display:none}
+
+/* --- tabs ------------------------------------------------------------------
+   Underline, not pills: a pill on this page means "this writes a setting to
+   the router" (network mode), and the two rows sit close enough that sharing a
+   shape would blur which one changes your radio. */
+.tabs{display:flex; gap:2px; border-bottom:1px solid var(--line); margin-top:14px}
+.tab{
+  font:inherit; font-size:14px; padding:10px 12px; cursor:pointer;
+  background:none; border:none; border-bottom:2px solid transparent;
+  margin-bottom:-1px; color:var(--faint);
+  transition:color .15s, border-color .15s;
+}
+.tab:hover{color:var(--muted)}
+.tab[aria-selected="true"]{color:var(--ink); font-weight:600; border-bottom-color:var(--ink)}
+.tab-badge{
+  font-family:var(--nums); font-size:11px; color:var(--good); margin-left:5px;
+}
+.tab-badge:empty{display:none}
+
+[role="tabpanel"]{padding-top:26px}
+[role="tabpanel"][hidden]{display:none}
+
+/* --- sections and shared components ---------------------------------------- */
+section{margin-bottom:40px}
+section:last-child{margin-bottom:0}
+section h2{font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--faint);
+  font-weight:500; margin-bottom:14px}
+.caption{float:right; letter-spacing:0; text-transform:none; font-size:12px; color:var(--faint)}
+
+.card{background:var(--surface); border:1px solid var(--line); border-radius:10px}
+.card.rows{padding:4px 18px}
+.card.pad{padding:14px 16px}
+
+.row{display:flex; justify-content:space-between; align-items:baseline;
+  padding:11px 0; border-bottom:1px solid var(--line-soft)}
+.row:last-child{border-bottom:none}
+.row .k{color:var(--muted); font-size:14px}
+.row .v{font-family:var(--nums); font-size:14px}
+.row .v:empty::after{content:"—"; color:var(--faint)}
+.row .v.live{color:var(--muted)}
+#bigVal:empty::after{content:"···"; color:var(--faint)}
+
+.seg{display:flex; gap:8px; flex-wrap:wrap}
+.seg button{
+  font:inherit; font-size:14px; padding:8px 16px; cursor:pointer;
+  background:var(--surface); color:var(--muted);
+  border:1px solid var(--line); border-radius:999px;
+  transition:background-color .15s, color .15s, border-color .15s;
+}
+.seg button:hover:not(.active){color:var(--ink); border-color:var(--faint)}
+.seg button.active{background:var(--ink); border-color:var(--ink); color:var(--bg); font-weight:500}
+.seg button:disabled{opacity:.45; cursor:wait}
+
+.hint{font-size:13px; color:var(--faint); margin-top:10px; min-height:18px}
+.hint.error{color:var(--poor)}
+
+/* The row of secondary controls a panel opens with: Refresh on Messages, the
+   saved codes and Manage on USSD. */
+.panel-actions{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px}
+
+.field-row{display:flex; gap:8px; margin-bottom:10px}
+.field-row[hidden]{display:none}
+.input{
+  flex:1; min-width:0; font:inherit; font-size:14px; padding:8px 14px;
+  background:var(--surface); color:var(--ink);
+  border:1px solid var(--line); border-radius:8px;
+}
+.input::placeholder{color:var(--faint)}
+.btn{
+  font:inherit; font-size:14px; padding:8px 16px; cursor:pointer;
+  background:var(--ink); color:var(--bg); border:1px solid var(--ink);
+  border-radius:8px; font-weight:500; transition:opacity .15s;
+}
+.btn:hover{opacity:.85}
+.btn:disabled{opacity:.45; cursor:wait}
+.btn-ghost{background:none; color:var(--muted); border:1px solid var(--line)}
+.btn-ghost:hover{color:var(--poor); border-color:var(--poor); opacity:1}
+.link-btn{
+  font:inherit; font-size:13px; padding:0; background:none; border:none;
+  color:var(--faint); cursor:pointer; text-decoration:underline;
+  text-underline-offset:3px; transition:color .15s;
+}
+.link-btn:hover{color:var(--ink)}
+.link-btn:disabled{opacity:.45; cursor:wait}
+
+/* --- signal panel ----------------------------------------------------------- */
+.spark-wrap{padding:16px 14px 10px}
+svg#spark{display:block; width:100%; height:96px}
+
+/* --- messages --------------------------------------------------------------- */
+.sms-list:empty{display:none}
+.sms-list{margin-bottom:12px}
+.sms-msg{padding:12px 0; border-bottom:1px solid var(--line-soft)}
+.sms-msg:last-child{border-bottom:none}
+.sms-head{display:flex; align-items:baseline; gap:8px; margin-bottom:4px}
+.sms-from{font-size:14px; color:var(--ink)}
+.sms-msg.unread .sms-from{font-weight:600}
+.sms-when{font-family:var(--nums); font-size:12px; color:var(--faint); margin-left:auto;
+  flex-shrink:0}
+.sms-dot{width:6px; height:6px; border-radius:50%; background:var(--q); flex-shrink:0}
+.sms-body{font-size:14px; color:var(--muted); white-space:pre-wrap; word-break:break-word}
+.sms-empty{font-size:13px; color:var(--faint); margin-bottom:12px}
+/* Two fields and a button do not fit one phone-width line. Floors rather than
+   ratios, because .input carries min-width:0 and without a floor the shorter
+   field loses every pixel to the longer one instead of wrapping. */
+#sms-compose{flex-wrap:wrap}
+#sms-number{flex:1 1 130px; min-width:130px}
+#sms-text{flex:2 1 200px; min-width:200px}
+
+/* --- speed test -------------------------------------------------------------- */
+.speed-actions{display:flex; align-items:center; gap:12px; margin-top:12px}
+.speed-actions .hint{margin-top:0}
+#speed-caption{margin-left:auto; text-align:right}
+
+/* --- USSD --------------------------------------------------------------------- */
+#ussd-saved:empty{display:none}
+.ussd-manage-card{margin-bottom:14px}
+.ussd-manage-label{
+  font-size:12px; letter-spacing:.18em; text-transform:uppercase;
+  color:var(--faint); font-weight:500; margin-bottom:12px;
+}
+.ussd-manage-list:empty{display:none}
+.ussd-manage-row{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:11px 0; border-bottom:1px solid var(--line-soft);
+}
+.ussd-manage-row:last-child{border-bottom:none}
+.ussd-manage-row .ussd-manage-meta{
+  display:flex; align-items:baseline; gap:8px; min-width:0; overflow:hidden;
+}
+.ussd-manage-row .lbl{
+  font-size:14px; color:var(--ink);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.ussd-manage-row .code{
+  font-family:var(--nums); font-size:12px; color:var(--faint); flex-shrink:0;
+}
+.ussd-x{
+  font:inherit; font-size:17px; line-height:1; cursor:pointer;
+  background:none; border:none; color:var(--faint);
+  padding:8px 10px; border-radius:6px; transition:color .15s, background-color .15s;
+}
+.ussd-x:hover{color:var(--poor); background:var(--line-soft)}
+.ussd-x:disabled{opacity:.45; cursor:wait}
+.ussd-out{
+  padding:14px 16px; margin-bottom:10px; font-family:var(--nums); font-size:13px;
+  white-space:pre-wrap; word-break:break-word; color:var(--ink);
+}
+.ussd-out.error{color:var(--poor); border-color:var(--poor)}
+
+/* --- footer -------------------------------------------------------------------- */
+footer{display:flex; align-items:center; gap:18px; color:var(--faint); font-size:13px;
+  margin-top:40px; padding-top:16px; border-top:1px solid var(--line-soft)}
+footer button, footer select{
+  font:inherit; font-size:13px; background:none; border:none; color:var(--muted);
+  cursor:pointer; padding:2px 0; text-decoration:underline; text-underline-offset:3px;
+}
+footer select{text-decoration:none; border-bottom:1px solid var(--line)}
+
+@media (prefers-reduced-motion: reduce){ *{transition:none !important} }

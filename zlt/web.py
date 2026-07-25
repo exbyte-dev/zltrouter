@@ -13,9 +13,11 @@ from __future__ import annotations
 import threading
 from dataclasses import asdict
 from importlib import resources
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from zlt import ussd_store
@@ -93,6 +95,16 @@ def create_app(client: ZltClient) -> FastAPI:
             raise HTTPException(status_code=502, detail=str(exc))
         except RouterUnreachable as exc:
             raise HTTPException(status_code=504, detail=str(exc))
+
+    # The dashboard's stylesheet and per-panel scripts. Same origin as the
+    # page, never a CDN: the router LAN is sometimes the only network there is.
+    # StaticFiles wants a real directory, not the Traversable that
+    # resources.files() hands back, so this one path is resolved from __file__.
+    app.mount(
+        "/static",
+        StaticFiles(directory=Path(__file__).resolve().parent / "static"),
+        name="static",
+    )
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:

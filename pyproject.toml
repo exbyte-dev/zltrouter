@@ -1,6 +1,6 @@
 [project]
 name = "zlt"
-version = "0.8.0"
+version = "0.9.0"
 description = "CLI for the MTN ZLT T10D MAX (ZTE NV8645) router"
 requires-python = ">=3.11"
 dependencies = [
@@ -24,4 +24,4 @@ build-backend = "setuptools.build_meta"
 packages = ["zlt"]
 
 [tool.setuptools.package-data]
-zlt = ["static/*.html"]
+zlt = ["static/*.html", "static/*.css", "static/js/*.js"]

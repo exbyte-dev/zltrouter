@@ -160,8 +160,15 @@ zlt serve                      # http://127.0.0.1:8464
 zlt serve --host 0.0.0.0       # reachable from other LAN devices (see note)
 ```
 
+- **Pinned meter, tabbed tools:** the reading, quality word and range bar sit
+  above a tab bar and stay on screen whichever tab you are on, so reading an SMS
+  never scrolls away the thing you opened the dashboard for. The meter folds to a
+  single line once you scroll. Tabs are `#signal`, `#messages`, `#ussd` and
+  `#speed`, so a tab is linkable and the back button moves between them. Each
+  tool panel makes its first request when you first open it, not at page load.
 - **Walk test strip:** rolling 15-minute RSRP/RSSI history, so you can carry the
-  router around and watch the line respond.
+  router around and watch the line respond. It keeps recording on every tab, so
+  the graph has no holes in it when you come back.
 - **Live meter and tiles:** RSRP (or RSSI when not logged in), band, SNR, RSRQ,
   PCI, bars, PPP state, polled every 1/3/10s with pause.
 - **Network mode switching:** the same `SET_BEARER_PREFERENCE` write as
@@ -173,10 +180,11 @@ zlt serve --host 0.0.0.0       # reachable from other LAN devices (see note)
   `~/.config/zlt/ussd.json` the CLI uses, so codes saved either way show up in
   both.
 - **Messages:** the SMS inbox with unread marked and counted, plus a compose box
-  for sending. Loaded when you open the panel and after each send, with an
-  explicit Refresh, rather than on the status poll: an inbox read takes the same
-  router lock the signal poll wants, and the device is slow enough that polling
-  both would make the panel fight itself.
+  for sending. The unread count rides on the Messages tab, seeded by a single
+  read once the first status poll succeeds. After that the inbox is read when you
+  open the tab, after each send, and on the explicit Refresh, never on the status
+  poll: an inbox read takes the same router lock the signal poll wants, and the
+  device is slow enough that polling both would make the panel fight itself.
 - **Speed test:** an on-demand download/upload/ping test that runs in the browser,
   so it measures the link of whatever device you opened the panel on (phone
   included), through the router, out over 4G. The dashboard is not in the data
@@ -187,8 +195,11 @@ zlt serve --host 0.0.0.0       # reachable from other LAN devices (see note)
   ["Speed test target"](#speed-test-target) to point it elsewhere.
 - **Light / dark:** follows your system theme by default; the toggle in the header
   overrides it and the choice sticks.
-- Single self-contained HTML page, zero CDN dependencies: it works when the
-  router LAN is your only network.
+- Served entirely from the local server, zero CDN dependencies and no build step:
+  it works when the router LAN is your only network. `index.html` is markup,
+  `static/app.css` is the styling, and each panel is one file under
+  `static/js/`, loaded as plain deferred scripts sharing one `window.zlt`
+  namespace.
 - All auth (nonce login, CSRF, lockout guard, session cache) is delegated to
   `ZltClient`; the web layer adds no second implementation of any of it.
 
@@ -220,9 +231,11 @@ API surface (all JSON): `GET /api/status`, `GET /api/net`,
 `DELETE /api/ussd/codes {"label": "Balance"}`,
 `POST /api/ussd/send {"code": "*310#"}`, `POST /api/ussd/reply {"text": "1"}`,
 `POST /api/ussd/cancel`. USSD is the worked example of this pattern: adding
-another write feature (SMS, etc.) is one endpoint here plus one panel in
-`zlt/static/index.html`; the raw `client.post()` passthrough already handles
-CSRF and auth-retry for any `goformId` you capture from the stock UI.
+another write feature (SMS, etc.) is one endpoint here, one panel and one tab
+button in `zlt/static/index.html`, one file in `zlt/static/js/`, and one
+`zlt.tabs.onFirstShow(...)` registration in it. The raw `client.post()`
+passthrough already handles CSRF and auth-retry for any `goformId` you capture
+from the stock UI.
 
 To keep the dashboard always up (so you can hit it from your phone without leaving
 a terminal open), see ["Running the dashboard on login"](#running-the-dashboard-on-login)
