@@ -498,11 +498,16 @@ git commit -am "chore: 0.11.0rc1"
 git tag -a v0.11.0rc1 -m "0.11.0rc1" && git push --follow-tags
 
 # 2. Verify the built package really works, installed from TestPyPI.
-#    The extra index is required: TestPyPI does not mirror click/requests/fastapi/uvicorn.
-pipx install --index-url https://test.pypi.org/simple/ \
-             --pip-args="--extra-index-url https://pypi.org/simple/" zltrouter
+#    Install it with --no-deps and get the dependencies from real PyPI separately.
+#    Pointing --index-url at TestPyPI makes it the primary index, and it carries
+#    broken stand-ins for fastapi and friends that fail to build; an
+#    --extra-index-url does not save you, because pip merges both indexes.
+python3 -m venv /tmp/zlt-rc && . /tmp/zlt-rc/bin/activate
+pip install --index-url https://test.pypi.org/simple/ --no-deps zltrouter
+pip install click requests fastapi uvicorn
 zlt --version
 zlt serve       # confirms the dashboard's static assets made it into the wheel
+deactivate && rm -rf /tmp/zlt-rc
 
 # 3. Release: set version to 0.11.0 in both files
 git commit -am "chore: release 0.11.0"
