@@ -492,7 +492,10 @@ Since the match is exact, a rehearsal needs the prerelease version committed too
 
 ```bash
 # 1. Rehearse: set version to 0.11.0rc1 in pyproject.toml AND zlt/__init__.py
-git commit -am "chore: 0.11.0rc1" && git tag v0.11.0rc1 && git push --follow-tags
+#    Tag must be annotated (-a). --follow-tags ignores lightweight tags, so a
+#    plain `git tag` pushes the branch and silently leaves the tag behind.
+git commit -am "chore: 0.11.0rc1"
+git tag -a v0.11.0rc1 -m "0.11.0rc1" && git push --follow-tags
 
 # 2. Verify the built package really works, installed from TestPyPI.
 #    The extra index is required: TestPyPI does not mirror click/requests/fastapi/uvicorn.
@@ -502,7 +505,8 @@ zlt --version
 zlt serve       # confirms the dashboard's static assets made it into the wheel
 
 # 3. Release: set version to 0.11.0 in both files
-git commit -am "chore: release 0.11.0" && git tag v0.11.0 && git push --follow-tags
+git commit -am "chore: release 0.11.0"
+git tag -a v0.11.0 -m "0.11.0" && git push --follow-tags
 ```
 
 Skipping the rehearsal is possible but risky for anything touching packaging: a
