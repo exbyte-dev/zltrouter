@@ -194,9 +194,9 @@ def test_static_assets_are_packaged():
     data = tomllib.loads((root / "pyproject.toml").read_text())
     globs = data["tool"]["setuptools"]["package-data"]["zlt"]
 
-    assert "static/*.html" in globs
-    assert "static/*.css" in globs
-    assert "static/js/*.js" in globs
+    # Deliberately no assertion on the literal glob strings. What matters is
+    # which files end up shipped, not how the patterns are spelled, and pinning
+    # the spelling failed a change that widened them to a recursive match.
 
     # Every asset index.html asks for has to be matched by one of those globs.
     static = root / "zlt" / "static"

@@ -1,8 +1,29 @@
 [project]
-name = "zlt"
-version = "0.10.0"
+# Distribution name only. The installed command and the import package are both
+# "zlt"; plain "zlt" is unavailable on PyPI because it collides with "zit" under
+# PyPI's name-similarity check.
+name = "zltrouter"
+version = "0.11.0rc1"
 description = "CLI for the MTN ZLT T10D MAX (ZTE NV8645) router"
+readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Exbyte", email = "ismailaabubakar112@gmail.com" }]
+keywords = ["zlt", "zte", "router", "4g", "lte", "cpe", "mtn", "nv8645"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Environment :: Web Environment",
+  "Intended Audience :: End Users/Desktop",
+  "Intended Audience :: System Administrators",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: System :: Networking",
+  "Topic :: Utilities",
+]
 dependencies = [
   "click>=8.1",
   "requests>=2.31",
@@ -13,15 +34,20 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "responses>=0.25", "httpx>=0.27"]
 
+[project.urls]
+Homepage = "https://github.com/exbyte-dev/zltrouter"
+Repository = "https://github.com/exbyte-dev/zltrouter"
+Issues = "https://github.com/exbyte-dev/zltrouter/issues"
+
 [project.scripts]
 zlt = "zlt.cli:cli"
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["zlt"]
 
 [tool.setuptools.package-data]
-zlt = ["static/*.html", "static/*.css", "static/js/*.js"]
+zlt = ["static/**/*"]

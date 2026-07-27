@@ -60,8 +60,11 @@ Needs [pipx](https://pipx.pypa.io). It puts `zlt` on your PATH in an isolated
 environment, and works the same on Linux, macOS and Windows.
 
 ```bash
-pipx install zlt
+pipx install zltrouter
 ```
+
+The package is `zltrouter` but the command it installs is **`zlt`**, which is
+what every example below uses. (Plain `zlt` is not available on PyPI.)
 
 Then bootstrap your config. It prompts for the router admin password, writes
 `~/.config/zlt/config` with `chmod 600`, and offers to run the dashboard
@@ -90,7 +93,7 @@ rm -f ~/.config/systemd/user/zlt-web.service
 systemctl --user daemon-reload
 rm -f ~/.local/bin/zlt
 rm -rf .venv
-pipx install zlt
+pipx install zltrouter
 ```
 
 ### Running the dashboard on login
@@ -469,3 +472,39 @@ python3 -m venv .venv
 ```
 
 All HTTP is mocked in tests (via `responses`); no test talks to a real device.
+
+### Releasing
+
+Releases are published to PyPI by `.github/workflows/release.yml`, triggered by
+pushing a tag. Uploads use PyPI Trusted Publishing, so there is no API token
+stored in the repository.
+
+The tag decides how far the pipeline goes:
+
+| Tag | Runs |
+| --- | --- |
+| `v0.11.0rc1` | tests, build, TestPyPI. Stops there. |
+| `v0.11.0` | tests, build, TestPyPI, PyPI, GitHub Release. |
+
+The tag must match the version in `pyproject.toml` exactly or the build fails,
+which is what stops a mistagged release from burning a version number on PyPI.
+Since the match is exact, a rehearsal needs the prerelease version committed too:
+
+```bash
+# 1. Rehearse: set version to 0.11.0rc1 in pyproject.toml AND zlt/__init__.py
+git commit -am "chore: 0.11.0rc1" && git tag v0.11.0rc1 && git push --follow-tags
+
+# 2. Verify the built package really works, installed from TestPyPI.
+#    The extra index is required: TestPyPI does not mirror click/requests/fastapi/uvicorn.
+pipx install --index-url https://test.pypi.org/simple/ \
+             --pip-args="--extra-index-url https://pypi.org/simple/" zltrouter
+zlt --version
+zlt serve       # confirms the dashboard's static assets made it into the wheel
+
+# 3. Release: set version to 0.11.0 in both files
+git commit -am "chore: release 0.11.0" && git tag v0.11.0 && git push --follow-tags
+```
+
+Skipping the rehearsal is possible but risky for anything touching packaging: a
+PyPI version number is burned permanently once uploaded, even if you delete the
+release.
