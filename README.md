@@ -23,6 +23,11 @@ Verified live against firmware `CPE_NV8645_230A_E_QX_CAN-P42U17-20250703`.
 - Config and session cache live under your home directory (XDG paths), so the command
   works from any directory once installed.
 
+There is also an **Android app**, [Router Signal](https://github.com/exbyte-dev/zlt-android),
+which ports the login and `reqproc` handling from this project. It covers signal,
+connection state and the network mode switcher, with a Quick Settings tile. This
+project remains the reference for the protocol — see [`docs/protocol.md`](docs/protocol.md).
+
 ## Install
 
 Needs [pipx](https://pipx.pypa.io). It puts `zlt` on your PATH in an isolated
