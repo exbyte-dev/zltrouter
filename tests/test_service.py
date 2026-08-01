@@ -28,7 +28,7 @@ def test_resolve_raises_clear_error_when_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(service.shutil, "which", lambda _n: None)
     with pytest.raises(service.ServiceError) as exc:
         service.resolve_zlt_binary()
-    assert "pipx install zlt" in str(exc.value)
+    assert "pipx install zltrouter" in str(exc.value)
 
 
 @pytest.mark.parametrize("platform,expected", [

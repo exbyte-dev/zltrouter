@@ -51,7 +51,7 @@ def resolve_zlt_binary() -> Path:
         return Path(found)
     raise ServiceError(
         f"could not find the 'zlt' executable (looked at {sibling} and on PATH).\n"
-        "Reinstall with:  pipx install zlt"
+        "Reinstall with:  pipx install zltrouter"
     )
 
 
