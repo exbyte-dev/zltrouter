@@ -93,10 +93,18 @@ Session cache (the authenticated cookie): `$XDG_STATE_HOME/zlt/session.json`
 
 ### Upgrading from a pre-0.4 install
 
-Earlier versions used `./install.sh`, which built a project-local `.venv` and
-symlinked `~/.local/bin/zlt` at it. pipx will not overwrite a file it does not
-own, so remove the old install first, or a stale symlink shadows the real entry
-point on your PATH.
+Two things changed at 0.4 that a straight `pipx install` will not clean up for
+you. The distribution was renamed from `zlt` to `zltrouter` (both install a
+command called `zlt`), and the old installer put its own `zlt` on your PATH.
+pipx will not overwrite an entry point it does not own, so remove the old
+install first or the stale one keeps winning.
+
+Your settings survive the move: `~/.config/zlt/config` and the session cache
+have been on the same paths since 0.3.0, on every OS, so there is no need to
+re-run `zlt init-config`.
+
+**Linux.** Earlier versions used `./install.sh`, which built a project-local
+`.venv` and symlinked `~/.local/bin/zlt` at it:
 
 ```bash
 systemctl --user disable --now zlt-web          # if you ran ./service.sh
@@ -105,6 +113,45 @@ systemctl --user daemon-reload
 rm -f ~/.local/bin/zlt
 pipx install zltrouter
 ```
+
+**Windows.** `install.sh` and `service.sh` were bash, so a Windows install was
+always a manual `pip install` — usually `pip install -e .` in the checkout, into
+either a `.venv` there or your user site-packages. Find out which, then remove
+that one:
+
+```bat
+where zlt
+py -m pip show zlt
+
+py -m pip uninstall -y zlt        :: user/global install; use the same
+                                  :: interpreter "where zlt" pointed into
+rmdir /s /q .venv                 :: or, if it lived in a checkout venv
+```
+
+Then install the published package. `ensurepath` needs a new terminal before it
+takes effect:
+
+```bat
+py -m pip install --user pipx
+py -m pipx ensurepath
+:: open a new terminal
+pipx install zltrouter
+zlt --version
+```
+
+If `where zlt` still lists more than one path, the leftover is whichever copy
+you did not remove above; delete that `zlt.exe` and re-check.
+
+There was no autostart to uninstall — `service.sh` only ever spoke systemd — so
+`zlt service install` on Windows is a fresh Task Scheduler on-logon task, and
+`zlt service print-artifact` shows the XML it registers.
+
+**macOS.** As Linux, minus the systemd step: `rm -f ~/.local/bin/zlt`, then
+`pipx install zltrouter`.
+
+One thing to watch on any OS if you keep the old checkout: a project-local
+`.env` is still read when you run `zlt` from that directory, for any key
+`~/.config/zlt/config` does not set. Delete it if you no longer want it.
 
 ## Command reference
 
