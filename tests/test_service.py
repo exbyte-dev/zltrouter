@@ -206,7 +206,11 @@ TASK_NS = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
 
 def _schtasks(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
-    return service.SchtasksBackend(Path(r"C:\pipx\bin\zlt.exe"), "0.0.0.0", 8464)
+    # PureWindowsPath, not Path: the backend re-parses exec_path via
+    # PureWindowsPath, so the value must round-trip cleanly on POSIX runners.
+    from pathlib import PureWindowsPath
+    return service.SchtasksBackend(
+        PureWindowsPath(r"C:\pipx\bin\zlt.exe"), "0.0.0.0", 8464)
 
 
 def test_schtasks_xml_is_valid_and_triggers_on_logon(tmp_path, monkeypatch):
@@ -214,9 +218,11 @@ def test_schtasks_xml_is_valid_and_triggers_on_logon(tmp_path, monkeypatch):
     # The declaration says UTF-16, so encode to match before parsing.
     root = ET.fromstring(backend.render().encode("utf-16"))
     assert root.find(".//t:LogonTrigger/t:Enabled", TASK_NS).text == "true"
-    assert root.find(".//t:Exec/t:Command", TASK_NS).text == r"C:\pipx\bin\zlt.exe"
+    # pythonw.exe (not zlt.exe): zlt.exe is console-mode and makes Task
+    # Scheduler pop a visible cmd window at login. pythonw.exe is windowless.
+    assert root.find(".//t:Exec/t:Command", TASK_NS).text == r"C:\pipx\bin\pythonw.exe"
     args = root.find(".//t:Exec/t:Arguments", TASK_NS).text
-    assert args.startswith("serve --host 0.0.0.0 --port 8464 --log-file ")
+    assert args.startswith("-m zlt serve --host 0.0.0.0 --port 8464 --log-file ")
     assert root.find(".//t:RestartOnFailure/t:Count", TASK_NS).text == "3"
     assert root.find(".//t:Settings/t:Hidden", TASK_NS).text == "true"
 
@@ -224,15 +230,17 @@ def test_schtasks_xml_is_valid_and_triggers_on_logon(tmp_path, monkeypatch):
 def test_schtasks_render_escapes_xml_entities(tmp_path, monkeypatch):
     # A path or description containing '&' or '<' (e.g. a Windows username
     # with an ampersand) must not break the generated XML.
+    from pathlib import PureWindowsPath
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     monkeypatch.setattr(service, "DESCRIPTION", "zlt dashboard <local> & friends")
     backend = service.SchtasksBackend(
-        Path(r"C:\Users\Bob & Alice\bin\zlt.exe"), "0.0.0.0", 8464)
+        PureWindowsPath(r"C:\Users\Bob & Alice\bin\zlt.exe"), "0.0.0.0", 8464)
     xml_text = backend.render()
     # This is the concrete failure mode being fixed: unescaped '&'/'<' would
     # make this raise instead of parsing cleanly.
     root = ET.fromstring(xml_text.encode("utf-16"))
-    assert root.find(".//t:Exec/t:Command", TASK_NS).text == r"C:\Users\Bob & Alice\bin\zlt.exe"
+    assert root.find(".//t:Exec/t:Command", TASK_NS).text == (
+        r"C:\Users\Bob & Alice\bin\pythonw.exe")
     assert root.find(".//t:RegistrationInfo/t:Description", TASK_NS).text == (
         "zlt dashboard <local> & friends")
 
