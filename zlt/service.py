@@ -19,7 +19,7 @@ import subprocess
 import sys
 import time
 from abc import ABC, abstractmethod
-from pathlib import Path, PurePath
+from pathlib import Path, PurePath, PureWindowsPath
 from xml.sax.saxutils import escape
 
 from zlt.config import config_home
@@ -264,7 +264,14 @@ class LaunchdBackend(Backend):
 
 
 class SchtasksBackend(Backend):
-    """Windows. Task Scheduler on-logon task, registered from an XML file."""
+    """Windows. Task Scheduler on-logon task, registered from an XML file.
+
+    Launched under pythonw.exe rather than the zlt.exe console-script wrapper.
+    Task Scheduler running a console-mode exe with InteractiveToken makes
+    Windows allocate a visible cmd window that sits on the desktop until the
+    user closes it. pythonw.exe is Python's windowless interpreter, so the
+    service runs truly invisibly at login.
+    """
 
     def _state_dir(self) -> Path:
         base = os.environ.get("LOCALAPPDATA")
@@ -278,11 +285,17 @@ class SchtasksBackend(Backend):
         # Task Scheduler captures nothing, so serve --log-file does the work.
         return self._state_dir() / f"{SERVICE_NAME}.log"
 
+    def _pythonw(self) -> PureWindowsPath:
+        # Parse via PureWindowsPath so this works when the test runner is
+        # Linux and self.exec_path is a PurePosixPath holding a Windows-style
+        # string. pipx / venv always drop pythonw.exe next to zlt.exe.
+        return PureWindowsPath(str(self.exec_path)).with_name("pythonw.exe")
+
     def render(self) -> str:
-        raw_args = (f"serve --host {self.host} --port {self.port} "
+        raw_args = (f"-m zlt serve --host {self.host} --port {self.port} "
                     f"--log-file {self.log_path()}")
         description = escape(DESCRIPTION)
-        command = escape(str(self.exec_path))
+        command = escape(str(self._pythonw()))
         args = escape(raw_args)
         return (
             '<?xml version="1.0" encoding="UTF-16"?>\n'
