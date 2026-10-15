@@ -24,9 +24,11 @@ Verified live against firmware `CPE_NV8645_230A_E_QX_CAN-P42U17-20250703`.
   works from any directory once installed.
 
 There is also an **Android app**, [Router Signal](https://github.com/exbyte-dev/zlt-android),
-which ports the login and `reqproc` handling from this project. It covers signal,
-connection state and the network mode switcher, with a Quick Settings tile. This
-project remains the reference for the protocol — see [`docs/protocol.md`](docs/protocol.md).
+which ports the login and `reqproc` handling from this project. It covers what the
+dashboard does — signal with a walk test, the network mode switcher, SMS, USSD with
+saved codes, and a speed test — plus a Quick Settings tile. Saved USSD codes use the
+same format as `ussd.json`. This project remains the reference for the protocol —
+see [`docs/protocol.md`](docs/protocol.md).
 
 ## Install
 
